@@ -29,7 +29,6 @@ y_train = y_train[:train_n]
 
 #use test_n amount of testing examples
 x_test = x_test_raw[:test_n]
-print("reshaped x_test's shape: ", np.shape(x_test))
 print("Testing Examples Number: ", str(len(x_test)))
 y_test = y_test[:test_n]
 
