@@ -1,0 +1,16 @@
+ - RANDOM FOREST PROFILES -
+
+1) 
+sys.setrecursionlimit(3000)
+
+train_n = 5000
+test_n = 1000
+tree_number = 10
+fv_skip_top = 5000
+fv_length = 300
+Percentage of error is:  0.52
+Time Apprx: 22mins
+
+2)
+
+	

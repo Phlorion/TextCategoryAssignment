@@ -1,7 +1,6 @@
 from statistics import mode
 import numpy as np
 import math
-
 class Node:
     def __init__(self, checking_feature=None, is_leaf=False, category=None):
         self.checking_feature = checking_feature
@@ -10,8 +9,6 @@ class Node:
         self.is_leaf = is_leaf
         self.category = category
         
-
-
 class ID3:
     def __init__(self, features):
         self.tree = None
@@ -67,7 +64,6 @@ class ID3:
         
         return root
 
-
     @staticmethod
     def calculate_ig(classes_vector, feature):
         classes = set(classes_vector)
@@ -97,8 +93,6 @@ class ID3:
         
         ig = HC - HC_feature
         return ig    
-
-        
 
     def predict(self, x):
         predicted_classes = list()

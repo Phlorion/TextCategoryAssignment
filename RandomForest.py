@@ -2,26 +2,23 @@ from id3 import *
 from imdbDataSet import *
 import numpy as np
 import random
-
-# 
-# 
-#   !!!FIX ID3 FIT METHOD PROBLEM (2-D Arrays)!!!
-# 
-# 
+import sys
 
 
 #Ορισμός υπερπαραμέτρων
-train_n = 1000
-test_n = 100
-tree_number = 5
-fv_skip_top = 200
-fv_num_words = 1000
+sys.setrecursionlimit(3000)
+
+train_n = 5000
+test_n = 1000
+tree_number = 10
+fv_skip_top = 5000
+fv_length = 300
 
 #obtain imdb data 
 imdb = IMDB()
-(x_train_raw, y_train), (x_test_raw, y_test) = imdb.getTrainingData(skip_top=fv_skip_top, num_words=fv_num_words)
+(x_train_raw, y_train), (x_test_raw, y_test) = imdb.getTrainingData(skip_top=fv_skip_top, num_words=fv_length)
 
-#use train_n amount of training examples
+#use train_n amount of training exampl
 x_train = x_train_raw[:train_n]
 print("Training Examples Number: ", str(len(x_train)))
 y_train = y_train[:train_n]
@@ -34,7 +31,8 @@ y_test = y_test[:test_n]
 
 
 #create encoded feature vector (index of words)
-encoded_feature_vector = imdb.getFeatureVector(skip_top=fv_skip_top, num_words=fv_num_words)
+encoded_feature_vector = imdb.getFeatureVector(skip_top=fv_skip_top, num_words=fv_length)
+print("Encoded Feature Vector: ", encoded_feature_vector)
 
 #create 0-1 feature vector for each training example
 train_examples = np.zeros_like(x_train)
@@ -45,7 +43,9 @@ for i in range(len(x_train)):
             example[encoded_feature_vector.index(w)] = 1
     train_examples[i] = example
 
-print(train_examples[:3])
+#reshape train examples to 2D array
+train_examples = np.stack(train_examples)
+
 
 #create 0-1 feature vector for each test example
 test_examples = np.zeros_like(x_test)
@@ -55,30 +55,33 @@ for i in range(len(x_test)):
         if(w in encoded_feature_vector):
             example[encoded_feature_vector.index(w)] = 1
     test_examples[i] = example
+#reshape test examples to 2D array
+test_examples = np.stack(test_examples)
 
-#create ID3 trees for the ensamble
-trees = []
+
+#create ID3 forest for the ensamble
+forest = []
 for i in range(tree_number):
     id3_tree = ID3(features=encoded_feature_vector)
-    id3_tree.fit(x = train_examples, y = y_train)
-    trees.append(id3_tree)
+    id3_tree.fit(np.array(train_examples), np.array(y_train))
+    forest.append(id3_tree)
 
 
-#collect test example predictions from all trees
-all_tree_predictions = np.zeros(len(test_examples))
-for t in trees:
+#collect test example predictions from the forest
+all_tree_predictions = np.zeros(test_n)
+for t in forest:
     for i in range(len(test_examples)):
-        all_tree_predictions[i] = all_tree_predictions[i] + t.predict(test_examples[i])
+        all_tree_predictions[i] = all_tree_predictions[i] + t.predict(test_examples[i])[1]
 
 #implement majority vote for each example
 majority_outcome = np.zeros(len(test_examples))
 for i in range(len(all_tree_predictions)):
     #majority predicted positive outcome (1)
-    if(all_tree_predictions[i] / (len(trees)* 1.0) > 0.5):
+    if(all_tree_predictions[i] / (len(forest)* 1.0) > 0.5):
         majority_outcome[i] = 1
 
     #majority predicted negative outcome (0)
-    elif(all_tree_predictions[i] / (len(trees)* 1.0) < 0.5):
+    elif(all_tree_predictions[i] / (len(forest)* 1.0) < 0.5):
         majority_outcome[i] = 0
 
     #majority does not exists, both outcomes equally predicted -> choose randomly 0 or 1
@@ -87,16 +90,18 @@ for i in range(len(all_tree_predictions)):
 
 #calculate errors vector
 #for each example we use 0 if the predection is correct, 1 if the prediction is erroneous
-errors = np.zeros(len(x_test))
-for i in range(x_test):
+errors = np.zeros(test_n)
+for i in range(test_n):
     #absolute value defines the distance of two numbers, if the distance is not 0 then 
     #the prediction is different than the actual value of y_test, therefor an error
     errors[i] = abs(y_test[i] - majority_outcome[i]) 
 
 #show results for the first n test examples
-n = 200
+n = test_n
+print("Showing the first ", n, " expected answers:")
 print(y_test[:n])
+print("Showing the first ", n, " predicted answers:")
 print(majority_outcome[:n])
 
 #show error as percentage 
-print(sum(errors)/(len(errors)*1.0))
+print("Percentage of error is: ", sum(errors)/(len(errors)*1.0))
