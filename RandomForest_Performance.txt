@@ -1,16 +1,40 @@
- - RANDOM FOREST PROFILES -
+ - RANDOM FOREST PERFORMANCE PROFILES -
 
-1) 
+1) - Random values
+sys.setrecursionlimit(3000)
+
+train_n = 12000
+test_n = 10000
+tree_number = 5
+fv_skip_top = 323
+fv_length = 400
+tree_fv_length = 100
+
+Percentage of error is:  0.5037
+Time apprx: 2m 32s
+
+2) - Random values #2
 sys.setrecursionlimit(3000)
 
 train_n = 5000
-test_n = 1000
+test_n = 10000
+tree_number = 10
+fv_skip_top = 4000
+fv_length = 300
+tree_fv_length = 50
+
+Percentage of error is:  0.5038
+Time apprx: 32s
+
+3) - Random values #3
+sys.setrecursionlimit(3000)
+
+train_n = 5000
+test_n = 10000
 tree_number = 10
 fv_skip_top = 5000
-fv_length = 300
-Percentage of error is:  0.52
-Time Apprx: 22mins
+fv_length = 500
+tree_fv_length = 100
 
-2)
-
-	
+Percentage of error is:  0.5038
+Time apprx: 1m 39s

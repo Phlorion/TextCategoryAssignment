@@ -9,10 +9,11 @@ import sys
 sys.setrecursionlimit(3000)
 
 train_n = 5000
-test_n = 1000
+test_n = 10000
 tree_number = 10
-fv_skip_top = 5000
+fv_skip_top = 4000
 fv_length = 300
+tree_fv_length = 50
 
 #obtain imdb data 
 imdb = IMDB()
@@ -33,6 +34,13 @@ y_test = y_test[:test_n]
 #create encoded feature vector (index of words)
 encoded_feature_vector = imdb.getFeatureVector(skip_top=fv_skip_top, num_words=fv_length)
 print("Encoded Feature Vector: ", encoded_feature_vector)
+
+#each tree has a feature vector smaller than the original
+#choose each attribute at random
+encoded_tree_feature_vectors = []
+for i in range(tree_number):
+    encoded_tree_feature_vectors.append(random.sample(encoded_feature_vector, tree_fv_length))
+
 
 #create 0-1 feature vector for each training example
 train_examples = np.zeros_like(x_train)
@@ -62,26 +70,33 @@ test_examples = np.stack(test_examples)
 #create ID3 forest for the ensamble
 forest = []
 for i in range(tree_number):
-    id3_tree = ID3(features=encoded_feature_vector)
+    id3_tree = ID3(features=encoded_tree_feature_vectors[i])
     id3_tree.fit(np.array(train_examples), np.array(y_train))
     forest.append(id3_tree)
 
 
 #collect test example predictions from the forest
-all_tree_predictions = np.zeros(test_n)
-for t in forest:
-    for i in range(len(test_examples)):
-        all_tree_predictions[i] = all_tree_predictions[i] + t.predict(test_examples[i])[1]
+all_tree_predictions = np.zeros((tree_number, len(y_test)))
+for i in range(tree_number):
+    all_tree_predictions[i] = forest[i].predict(test_examples)
+
+#organize each tree's prediction to be calculated
+tree_votes = np.zeros(len(y_test))
+for i in range(len(y_test)):
+    for j in range(len(forest)):
+        tree_votes[i] += all_tree_predictions[j][i]
+
+
 
 #implement majority vote for each example
 majority_outcome = np.zeros(len(test_examples))
 for i in range(len(all_tree_predictions)):
     #majority predicted positive outcome (1)
-    if(all_tree_predictions[i] / (len(forest)* 1.0) > 0.5):
+    if(tree_votes[i] / (len(forest)* 1.0) > 0.5):
         majority_outcome[i] = 1
 
     #majority predicted negative outcome (0)
-    elif(all_tree_predictions[i] / (len(forest)* 1.0) < 0.5):
+    elif(tree_votes[i] / (len(forest)* 1.0) < 0.5):
         majority_outcome[i] = 0
 
     #majority does not exists, both outcomes equally predicted -> choose randomly 0 or 1
@@ -90,14 +105,14 @@ for i in range(len(all_tree_predictions)):
 
 #calculate errors vector
 #for each example we use 0 if the predection is correct, 1 if the prediction is erroneous
-errors = np.zeros(test_n)
-for i in range(test_n):
+errors = np.zeros(len(x_test))
+for i in range(len(x_test)):
     #absolute value defines the distance of two numbers, if the distance is not 0 then 
     #the prediction is different than the actual value of y_test, therefor an error
     errors[i] = abs(y_test[i] - majority_outcome[i]) 
 
 #show results for the first n test examples
-n = test_n
+n = len(x_test)
 print("Showing the first ", n, " expected answers:")
 print(y_test[:n])
 print("Showing the first ", n, " predicted answers:")
