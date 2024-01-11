@@ -1,122 +1,190 @@
 from id3 import *
 from imdbDataSet import *
 import numpy as np
-import random
+from sklearn.ensemble import RandomForestClassifier
 import sys
+import matplotlib.pyplot as plt
+import random
+from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
 
+def random_forest(x_train, y_train, x_test, y_test, fv_skip_top, fv_length, tree_number, tree_fv_length, min_samples_split=2, max_depth=np.inf):
+    #create encoded feature vector (index of words)
+    encoded_feature_vector = imdb.getFeatureVector(skip_top=fv_skip_top, num_words=fv_length)
+
+    #each tree has a feature vector smaller than the original
+    #choose each attribute at random
+    encoded_tree_feature_vectors = []
+    for i in range(tree_number):
+        encoded_tree_feature_vectors.append(random.sample(encoded_feature_vector, tree_fv_length))
+
+
+    #create 0-1 feature vector for each training example
+    train_examples = np.zeros_like(x_train)
+    for i in range(len(x_train)):
+        example = np.zeros(len(encoded_feature_vector))
+        for w in x_train[i]:  
+            if(w in encoded_feature_vector):
+                example[encoded_feature_vector.index(w)] = 1
+        train_examples[i] = example
+
+    #reshape train examples to 2D array
+    train_examples = np.stack(train_examples)
+
+
+    #create 0-1 feature vector for each test example
+    test_examples = np.zeros_like(x_test)
+    for i in range(len(x_test)):
+        example = np.zeros(len(encoded_feature_vector))
+        for w in x_test[i]:  
+            if(w in encoded_feature_vector):
+                example[encoded_feature_vector.index(w)] = 1
+        test_examples[i] = example
+    #reshape test examples to 2D array
+    test_examples = np.stack(test_examples)
+
+
+    #create ID3 forest for the ensamble
+    forest = []
+    for i in range(tree_number):
+        id3_tree = ID3(features=encoded_tree_feature_vectors[i], min_samples_split=min_samples_split, max_depth=max_depth)
+        id3_tree.fit(train_examples, np.array(y_train))
+        forest.append(id3_tree)
+
+
+    #collect test example predictions from the forest
+    all_tree_predictions = np.zeros((tree_number, len(y_test)))
+    for i in range(tree_number):
+        all_tree_predictions[i] = forest[i].predict(test_examples)
+
+    #organize each tree's prediction to be calculated
+    tree_votes = np.zeros(len(y_test))
+    for i in range(len(y_test)):
+        for j in range(len(forest)):
+            tree_votes[i] += all_tree_predictions[j][i]
+
+
+
+    #implement majority vote for each example
+    majority_outcome = np.zeros(len(test_examples))
+    for i in range(len(all_tree_predictions)):
+        #majority predicted positive outcome (1)
+        if(tree_votes[i] / (len(forest)* 1.0) > 0.5):
+            majority_outcome[i] = 1
+
+        #majority predicted negative outcome (0)
+        elif(tree_votes[i] / (len(forest)* 1.0) < 0.5):
+            majority_outcome[i] = 0
+
+        #majority does not exist, both outcomes equally predicted -> choose randomly 0 or 1
+        else:
+            majority_outcome[i] = random.randint(0,1)
+
+    # #calculate errors vector
+    # #for each example we use 0 if the predection is correct, 1 if the prediction is erroneous
+    # errors = np.zeros(len(x_test))
+
+    # #results list is a counter for each possible result type
+    # results = [0,0,0,0] # results formated as [FalsePos,FalseNeg,TruePos,TrueNeg]
+    # for i in range(len(x_test)):
+    #     #the value defines the nature of the result, if the absolute distance is not 0 then 
+    #     #the prediction is wrong
+    #     errors[i] = abs(y_test[i] - majority_outcome[i]) 
+
+    #     #True Negative
+    #     if y_test[i] == 0 and majority_outcome[i] == 0:
+    #         results[3] = results[3] + 1
+    #     #False Positive
+    #     elif y_test[i] == 0 and majority_outcome[i] == 1:
+    #         results[0] = results[0] + 1
+    #     #False Negative
+    #     elif y_test[i] == 1 and majority_outcome[i] == 0:
+    #         results[1] = results[1] + 1
+    #     #True Positive
+    #     elif y_test[i] == 1 and majority_outcome[i] == 1:
+    #         results[2] = results[2] + 1
+            
+    #create SciLearn random forest classifier for comparison
+    sl_random_forest = RandomForestClassifier(n_estimators=tree_number)
+    sl_random_forest.fit(train_examples,np.array(y_train))
+    sl_random_forest_pred = sl_random_forest.predict(test_examples)
+    
+    return y_test, majority_outcome, sl_random_forest_pred
 
 #Ορισμός υπερπαραμέτρων
 sys.setrecursionlimit(3000)
 
-train_n = 5000
-test_n = 10000
-tree_number = 10
-fv_skip_top = 4000
-fv_length = 300
-tree_fv_length = 50
+train_step = np.linspace(5000,5000,50,dtype=int)
+tree_number = 5
+fv_skip_top = 250
+fv_length = 200
+tree_fv_length = 30
+min_samples_split = 5
+max_depth = 15 #must be less or equal than tree_fv_length
+
 
 #obtain imdb data 
 imdb = IMDB()
-(x_train_raw, y_train), (x_test_raw, y_test) = imdb.getTrainingData(skip_top=fv_skip_top, num_words=fv_length)
+(x_train_raw, y_train_raw), (x_test_raw, y_test_raw) = imdb.getTrainingData(skip_top=fv_skip_top, num_words=fv_length)
 
-#use train_n amount of training exampl
-x_train = x_train_raw[:train_n]
-print("Training Examples Number: ", str(len(x_train)))
-y_train = y_train[:train_n]
+#initialize metrics
+metrics = {
+    'accuracy': accuracy_score,
+    'precision': precision_score,
+    'recall': recall_score,
+    'f1': f1_score
+}
 
+our_results = {metric: {'train': [], 'test': []} for metric in metrics}
+scilearn_results = {metric: {'train': [], 'test': []} for metric in metrics}
 
-#use test_n amount of testing examples
-x_test = x_test_raw[:test_n]
-print("Testing Examples Number: ", str(len(x_test)))
-y_test = y_test[:test_n]
+for step in train_step:
+    x_train = x_train_raw[:step]
+    y_train = y_train_raw[:step]
 
+    #training data tests
+    y_test_train, y_pred_train_our, y_pred_train_scilearn = random_forest(x_train=x_train, y_train=y_train, x_test=x_train_raw, y_test=y_train_raw, fv_skip_top=fv_skip_top, fv_length=fv_length,tree_number=tree_number,tree_fv_length=tree_fv_length, min_samples_split=min_samples_split,max_depth=max_depth)
+    
+    #testing data tests
+    y_test_test, y_pred_test_our, y_pred_test_scilearn = random_forest(x_train=x_train, y_train=y_train, x_test=x_test_raw, y_test=y_test_raw, fv_skip_top=fv_skip_top, fv_length=fv_length,tree_number=tree_number,tree_fv_length=tree_fv_length, min_samples_split=min_samples_split,max_depth=max_depth)
+    
+    for metric, func in metrics.items():
+        #calculate metrics for our implementation
+        if metric == 'precision':
+            our_results[metric]['train'].append(func(y_true=y_test_train, y_pred=y_pred_train_our, zero_division=np.nan))
+            our_results[metric]['test'].append(func(y_true=y_test_test, y_pred=y_pred_test_our, zero_division=np.nan))
+        else:
+            our_results[metric]['train'].append(func(y_true=y_test_train, y_pred=y_pred_train_our))
+            our_results[metric]['test'].append(func(y_true=y_test_test, y_pred=y_pred_test_our))
 
-#create encoded feature vector (index of words)
-encoded_feature_vector = imdb.getFeatureVector(skip_top=fv_skip_top, num_words=fv_length)
-print("Encoded Feature Vector: ", encoded_feature_vector)
+        #calculate metrics for scilearn implementation
+        if metric == 'precision':
+            scilearn_results[metric]['train'].append(func(y_true=y_test_train, y_pred=y_pred_train_scilearn, zero_division=np.nan))
+            scilearn_results[metric]['test'].append(func(y_true=y_test_test, y_pred=y_pred_test_scilearn, zero_division=np.nan))
+        else:
+            scilearn_results[metric]['train'].append(func(y_true=y_test_train, y_pred=y_pred_train_scilearn))
+            scilearn_results[metric]['test'].append(func(y_true=y_test_test, y_pred=y_pred_test_scilearn))
 
-#each tree has a feature vector smaller than the original
-#choose each attribute at random
-encoded_tree_feature_vectors = []
-for i in range(tree_number):
-    encoded_tree_feature_vectors.append(random.sample(encoded_feature_vector, tree_fv_length))
+# Plot results
+for metric in metrics.keys():
+    fig, axs = plt.subplots(1, 2, figsize=(10, 5))
 
+    # Subplot for our implementation
+    axs[0].plot(train_step, our_results[metric]['train'], color='green', label='training data')
+    axs[0].plot(train_step, our_results[metric]['test'], color='red', label='testing data')
+    axs[0].set_title('Our Random Forest')
+    axs[0].set_xlabel('Number of Training Data')
+    axs[0].set_ylabel(f'Percent {metric.capitalize()}')
+    axs[0].legend()
 
-#create 0-1 feature vector for each training example
-train_examples = np.zeros_like(x_train)
-for i in range(len(x_train)):
-    example = np.zeros(len(encoded_feature_vector))
-    for w in x_train[i]:  
-        if(w in encoded_feature_vector):
-            example[encoded_feature_vector.index(w)] = 1
-    train_examples[i] = example
+    # Subplot for scikit-learn implementation
+    axs[1].plot(train_step, scilearn_results[metric]['train'], color='green', label='training data')
+    axs[1].plot(train_step, scilearn_results[metric]['test'], color='red', label='testing data')
+    axs[1].set_title('Scikit-learn Random Forest')
+    axs[1].set_xlabel('Number of Training Data')
+    axs[1].set_ylabel(f'Percent {metric.capitalize()}')
+    axs[1].legend()
 
-#reshape train examples to 2D array
-train_examples = np.stack(train_examples)
+    # Display the figure with the subplots
+    plt.tight_layout()
+    plt.show()
 
-
-#create 0-1 feature vector for each test example
-test_examples = np.zeros_like(x_test)
-for i in range(len(x_test)):
-    example = np.zeros(len(encoded_feature_vector))
-    for w in x_test[i]:  
-        if(w in encoded_feature_vector):
-            example[encoded_feature_vector.index(w)] = 1
-    test_examples[i] = example
-#reshape test examples to 2D array
-test_examples = np.stack(test_examples)
-
-
-#create ID3 forest for the ensamble
-forest = []
-for i in range(tree_number):
-    id3_tree = ID3(features=encoded_tree_feature_vectors[i])
-    id3_tree.fit(np.array(train_examples), np.array(y_train))
-    forest.append(id3_tree)
-
-
-#collect test example predictions from the forest
-all_tree_predictions = np.zeros((tree_number, len(y_test)))
-for i in range(tree_number):
-    all_tree_predictions[i] = forest[i].predict(test_examples)
-
-#organize each tree's prediction to be calculated
-tree_votes = np.zeros(len(y_test))
-for i in range(len(y_test)):
-    for j in range(len(forest)):
-        tree_votes[i] += all_tree_predictions[j][i]
-
-
-
-#implement majority vote for each example
-majority_outcome = np.zeros(len(test_examples))
-for i in range(len(all_tree_predictions)):
-    #majority predicted positive outcome (1)
-    if(tree_votes[i] / (len(forest)* 1.0) > 0.5):
-        majority_outcome[i] = 1
-
-    #majority predicted negative outcome (0)
-    elif(tree_votes[i] / (len(forest)* 1.0) < 0.5):
-        majority_outcome[i] = 0
-
-    #majority does not exists, both outcomes equally predicted -> choose randomly 0 or 1
-    else:
-        majority_outcome[i] = random.randint(0,1)
-
-#calculate errors vector
-#for each example we use 0 if the predection is correct, 1 if the prediction is erroneous
-errors = np.zeros(len(x_test))
-for i in range(len(x_test)):
-    #absolute value defines the distance of two numbers, if the distance is not 0 then 
-    #the prediction is different than the actual value of y_test, therefor an error
-    errors[i] = abs(y_test[i] - majority_outcome[i]) 
-
-#show results for the first n test examples
-n = len(x_test)
-print("Showing the first ", n, " expected answers:")
-print(y_test[:n])
-print("Showing the first ", n, " predicted answers:")
-print(majority_outcome[:n])
-
-#show error as percentage 
-print("Percentage of error is: ", sum(errors)/(len(errors)*1.0))
