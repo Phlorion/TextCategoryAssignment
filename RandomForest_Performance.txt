@@ -103,3 +103,16 @@ tree_fv_length = 75
 
 Percentage of error is:  0.5056922762287818
 Time apprx: 3m 50s
+
+9) - Decreased Feature Vector Skip Top from 8#.
+sys.setrecursionlimit(3000)
+
+train_n = 25000
+test_n = 25000
+tree_number = 15
+fv_skip_top = 150
+fv_length = 300
+tree_fv_length = 75
+
+Percentage of error is:  0.5056922762287818
+Time apprx: 6m 5s
