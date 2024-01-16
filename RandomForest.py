@@ -143,43 +143,50 @@ for metric in metrics.keys():
 #plot the presicion/recall plots differently than f1 and accuracy
     if metric == 'recall':
         continue
-    else:
+ 
+    
+    if metric == 'precision':
         fig, axs = plt.subplots(1, 2, figsize=(10, 5))
-        if metric == 'presicion':
-            # Subplot for our implementation
-            axs[0].plot(our_results['recall']['train'], our_results['presicion']['train'], color='green', label='training data')
-            axs[0].plot(our_results['recall']['test'], our_results['presicion']['test'], color='red', label='testing data')
-            axs[0].set_title('Our Random Forest')
-            axs[0].set_xlabel('Recall')
-            axs[0].set_ylabel('Presicion')
-            axs[0].legend()
+        # Subplot for our implementation
+        axs[0].plot(our_results['recall']['train'], our_results['precision']['train'], color='green', label='training data')
+        axs[0].plot(our_results['recall']['test'], our_results['precision']['test'], color='red', label='testing data')
+        axs[0].set_title('Our Random Forest')
+        axs[0].set_xlabel('Recall')
+        axs[0].set_ylabel('Precision')
+        axs[0].legend()
 
-            # Subplot for scikit-learn implementation
-            axs[1].plot(scilearn_results['recall']['train'], scilearn_results['presicion']['train'], color='green', label='training data')
-            axs[1].plot(scilearn_results['recall']['test'], scilearn_results['presicion']['test'], color='red', label='testing data')
-            axs[1].set_title('Scikit-learn Random Forest')
-            axs[1].set_xlabel('Recall')
-            axs[1].set_ylabel('Presicion')
-            axs[1].legend()
+        # Subplot for scikit-learn implementation
+        axs[1].plot(scilearn_results['recall']['train'], scilearn_results['precision']['train'], color='green', label='training data')
+        axs[1].plot(scilearn_results['recall']['test'], scilearn_results['precision']['test'], color='red', label='testing data')
+        axs[1].set_title('Scikit-learn Random Forest')
+        axs[1].set_xlabel('Recall')
+        axs[1].set_ylabel('Precision')
+        axs[1].legend()
+        
+        # Display the figure with the subplots
+        plt.tight_layout()
+        plt.show()
     #for accuracy and f1 measure
-        elif metric != 'presicion':
-            # Subplot for our implementation
-            axs[0].plot(train_step, our_results[metric]['train'], color='green', label='training data')
-            axs[0].plot(train_step, our_results[metric]['test'], color='red', label='testing data')
-            axs[0].set_title('Our Random Forest')
-            axs[0].set_xlabel('Number of Training Data')
-            axs[0].set_ylabel(f'Percent {metric.capitalize()}')
-            axs[0].legend()
+    elif metric != 'precision':
+        fig, axs = plt.subplots(1, 2, figsize=(10, 5))
+        # Subplot for our implementation
+        axs[0].plot(train_step, our_results[metric]['train'], color='green', label='training data')
+        axs[0].plot(train_step, our_results[metric]['test'], color='red', label='testing data')
+        axs[0].set_title('Our Random Forest')
+        axs[0].set_xlabel('Number of Training Data')
+        axs[0].set_ylabel(f'Percent {metric.capitalize()}')
+        axs[0].legend()
 
-            # Subplot for scikit-learn implementation
-            axs[1].plot(train_step, scilearn_results[metric]['train'], color='green', label='training data')
-            axs[1].plot(train_step, scilearn_results[metric]['test'], color='red', label='testing data')
-            axs[1].set_title('Scikit-learn Random Forest')
-            axs[1].set_xlabel('Number of Training Data')
-            axs[1].set_ylabel(f'Percent {metric.capitalize()}')
-            axs[1].legend()
+        # Subplot for scikit-learn implementation
+        axs[1].plot(train_step, scilearn_results[metric]['train'], color='green', label='training data')
+        axs[1].plot(train_step, scilearn_results[metric]['test'], color='red', label='testing data')
+        axs[1].set_title('Scikit-learn Random Forest')
+        axs[1].set_xlabel('Number of Training Data')
+        axs[1].set_ylabel(f'Percent {metric.capitalize()}')
+        axs[1].legend()
 
         # Display the figure with the subplots
         plt.tight_layout()
         plt.show()
+
 
