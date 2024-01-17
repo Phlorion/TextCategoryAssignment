@@ -61,14 +61,17 @@ class IMDB:
         return self.word_index[word]
     
     def getInvertedWordIndex(self, n):
-        return self.inverted_word_index[n]
+        return self.inverted_word_index[n+4]
     
-'''
+
 if __name__ == '__main__':
     imdb = IMDB()
-    imdb.getTrainingData()
-    print(imdb.getDecodedSequence(0))
+    (x_train, y_train), _ = imdb.getTrainingData()
+    print(imdb.getDecodedSequence(x_train, 0))
     print(imdb.getXtrain(0))
     print(imdb.getYtrain(0))
-'''
+
+    print(imdb.getInvertedWordIndex(0))
+
+
     
