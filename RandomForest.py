@@ -5,11 +5,15 @@ from sklearn.ensemble import RandomForestClassifier
 import sys
 import matplotlib.pyplot as plt
 import random
+import math
 from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
 
-def random_forest(x_train, y_train, x_test, y_test, fv_skip_top, fv_length, tree_number, tree_fv_length):
+def random_forest(x_train, y_train, x_test, y_test, fv_skip_top, fv_length, tree_number, tree_fv_length, max_depth):
+
     #create encoded feature vector (index of words)
     encoded_feature_vector = imdb.getFeatureVector(skip_top=fv_skip_top, num_words=fv_length)
+
+
 
     #each tree has a feature vector smaller than the original
     #choose each attribute at random
@@ -17,6 +21,7 @@ def random_forest(x_train, y_train, x_test, y_test, fv_skip_top, fv_length, tree
     for i in range(tree_number):
         encoded_tree_feature_vectors.append(random.sample(encoded_feature_vector, tree_fv_length))
         encoded_tree_feature_vectors[i].sort()
+
 
 
     #create 0-1 feature vector for each training example
@@ -32,6 +37,7 @@ def random_forest(x_train, y_train, x_test, y_test, fv_skip_top, fv_length, tree
     train_examples = np.stack(train_examples)
 
 
+
     #create 0-1 feature vector for each test example
     test_examples = np.zeros_like(x_test)
     for i in range(len(x_test)):
@@ -44,56 +50,52 @@ def random_forest(x_train, y_train, x_test, y_test, fv_skip_top, fv_length, tree
     test_examples = np.stack(test_examples)
 
 
+
     #create ID3 forest for the ensamble
     forest = []
     for i in range(tree_number):
-        id3_tree = ID3(features=encoded_tree_feature_vectors[i])
+        id3_tree = ID3(features=encoded_tree_feature_vectors[i], max_depth=max_depth)
         id3_tree.fit(train_examples, np.array(y_train))
         forest.append(id3_tree)
+
 
 
     #collect test example predictions from the forest
     all_tree_predictions = np.zeros((tree_number, len(y_test)))
     for i in range(tree_number):
-        all_tree_predictions[i] = forest[i].predict(test_examples)
+        all_tree_predictions[i,:] = forest[i].predict(test_examples)
 
+
+        
     #organize each tree's prediction to be calculated
-    tree_votes = np.zeros(len(y_test))
-    for i in range(len(y_test)):
-        for j in range(len(forest)):
-            tree_votes[i] += all_tree_predictions[j][i]
+    tree_votes = np.sum(all_tree_predictions, axis=0)
 
 
 
     #implement majority vote for each example
     majority_outcome = np.zeros(len(test_examples))
-    for i in range(len(all_tree_predictions)):
-        #majority predicted positive outcome (1)
-        if(tree_votes[i] / (len(forest)* 1.0) > 0.5):
-            majority_outcome[i] = 1
+    #majority predicted positive outcome (1) when majority vote is greater than 0.5
+    #majority predicted negative outcome (0) when majority vote is lesser or equal than 0.5
+    majority_outcome = np.where(tree_votes / len(forest) > 0.5, 1, 0)
 
-        #majority predicted negative outcome (0)
-        elif(tree_votes[i] / (len(forest)* 1.0) < 0.5):
-            majority_outcome[i] = 0
 
-        #majority does not exist, both outcomes equally predicted -> choose randomly 0 or 1
-        else:
-            majority_outcome[i] = random.randint(0,1)
 
-    sl_random_forest = RandomForestClassifier(n_estimators=tree_number)
+    #implement sklearn's random forest for comparison
+    sl_random_forest = RandomForestClassifier(n_estimators=tree_number, max_features=max_depth)
     sl_random_forest.fit(train_examples,np.array(y_train))
     sl_random_forest_pred = sl_random_forest.predict(test_examples)
-    
+
     return y_test, majority_outcome, sl_random_forest_pred
 
 #Ορισμός υπερπαραμέτρων
 sys.setrecursionlimit(3000)
 
-train_step = np.linspace(1000,25000,30,dtype=int)
-tree_number = 5
-fv_skip_top = 150
-fv_length = 100
-tree_fv_length = 25
+train_step = np.linspace(5000,25000,15,dtype=int)
+tree_number = 7
+fv_skip_top = 80
+fv_length = 200
+tree_fv_length = 75
+id3_max_depth = math.ceil(math.sqrt(tree_fv_length))#this value must be lesser or equal to tree_fv_length
 
 
 #obtain imdb data 
@@ -116,77 +118,63 @@ for step in train_step:
     y_train = y_train_raw[:step]
 
     #training data tests
-    y_test_train, y_pred_train_our, y_pred_train_scilearn = random_forest(x_train=x_train, y_train=y_train, x_test=x_train_raw, y_test=y_train_raw, fv_skip_top=fv_skip_top, fv_length=fv_length,tree_number=tree_number,tree_fv_length=tree_fv_length)
+    y_test_train, y_pred_train_our, y_pred_train_scilearn = random_forest(x_train=x_train, y_train=y_train, x_test=x_train_raw, y_test=y_train_raw, fv_skip_top=fv_skip_top, fv_length=fv_length,tree_number=tree_number,tree_fv_length=tree_fv_length, max_depth = id3_max_depth)
     
+    print("Data for training tests was gathered at step -> " + str(step))
     #testing data tests
-    y_test_test, y_pred_test_our, y_pred_test_scilearn = random_forest(x_train=x_train, y_train=y_train, x_test=x_test_raw, y_test=y_test_raw, fv_skip_top=fv_skip_top, fv_length=fv_length,tree_number=tree_number,tree_fv_length=tree_fv_length)
-    
+    y_test_test, y_pred_test_our, y_pred_test_scilearn = random_forest(x_train=x_train, y_train=y_train, x_test=x_test_raw, y_test=y_test_raw, fv_skip_top=fv_skip_top, fv_length=fv_length,tree_number=tree_number,tree_fv_length=tree_fv_length, max_depth = id3_max_depth)
+    print("Data for testing tests was gathered at step -> " + str(step))
+
     for metric, func in metrics.items():
         #calculate metrics for our implementation
-        if metric == 'precision':
+        if metric == 'precision' or metric == 'recall':
             our_results[metric]['train'].append(func(y_true=y_test_train, y_pred=y_pred_train_our, zero_division=1))
             our_results[metric]['test'].append(func(y_true=y_test_test, y_pred=y_pred_test_our, zero_division=1))
         else:
             our_results[metric]['train'].append(func(y_true=y_test_train, y_pred=y_pred_train_our))
             our_results[metric]['test'].append(func(y_true=y_test_test, y_pred=y_pred_test_our))
 
+
         #calculate metrics for scilearn implementation
-        if metric == 'precision':
+        if metric == 'precision' or metric == 'recall':
             scilearn_results[metric]['train'].append(func(y_true=y_test_train, y_pred=y_pred_train_scilearn, zero_division=1))
             scilearn_results[metric]['test'].append(func(y_true=y_test_test, y_pred=y_pred_test_scilearn, zero_division=1))
         else:
             scilearn_results[metric]['train'].append(func(y_true=y_test_train, y_pred=y_pred_train_scilearn))
             scilearn_results[metric]['test'].append(func(y_true=y_test_test, y_pred=y_pred_test_scilearn))
 
-# Plot results
+print("Data collection for all training steps has been completed!")
+print("\n\n")
+print("[Our Random Forest] Metric " + metric + " for training data is calculated at: " +  str(our_results[metric]['train']))
+print("[Our Random Forest] Metric " + metric + " for testing data is calculated at: " +  str(our_results[metric]['test']))
+print("\n\n")
+print("[Scikit Learn] Metric " + metric + " for training data is calculated at: " +  str(scilearn_results[metric]['train']))
+print("[Scikit Learn] Metric " + metric + " for testing data is calculated at: " +  str(scilearn_results[metric]['test']))
+print("\n\n")
+
+
+#plot the results
 for metric in metrics.keys():
-#plot the presicion/recall plots differently than f1 and accuracy
-    if metric == 'recall':
-        continue
- 
-    
-    if metric == 'precision':
-        fig, axs = plt.subplots(1, 2, figsize=(10, 5))
-        # Subplot for our implementation
-        axs[0].plot(our_results['recall']['train'], our_results['precision']['train'], color='green', label='training data')
-        axs[0].plot(our_results['recall']['test'], our_results['precision']['test'], color='red', label='testing data')
-        axs[0].set_title('Our Random Forest')
-        axs[0].set_xlabel('Recall')
-        axs[0].set_ylabel('Precision')
-        axs[0].legend()
+#plot the accuracy, precision, recall and f1 curves
+    fig, axs = plt.subplots(1, 2, figsize=(10, 5))
+    # Subplot for our implementation
+    axs[0].plot(train_step, our_results[metric]['train'], color='green', label='training data')
+    axs[0].plot(train_step, our_results[metric]['test'], color='red', label='testing data')
+    axs[0].set_title('Our Random Forest')
+    axs[0].set_xlabel('Number of Training Data')
+    axs[0].set_ylabel(f'Percent {metric.capitalize()}')
+    axs[0].legend()
 
-        # Subplot for scikit-learn implementation
-        axs[1].plot(scilearn_results['recall']['train'], scilearn_results['precision']['train'], color='green', label='training data')
-        axs[1].plot(scilearn_results['recall']['test'], scilearn_results['precision']['test'], color='red', label='testing data')
-        axs[1].set_title('Scikit-learn Random Forest')
-        axs[1].set_xlabel('Recall')
-        axs[1].set_ylabel('Precision')
-        axs[1].legend()
-        
-        # Display the figure with the subplots
-        plt.tight_layout()
-        plt.show()
-    #for accuracy and f1 measure
-    elif metric != 'precision':
-        fig, axs = plt.subplots(1, 2, figsize=(10, 5))
-        # Subplot for our implementation
-        axs[0].plot(train_step, our_results[metric]['train'], color='green', label='training data')
-        axs[0].plot(train_step, our_results[metric]['test'], color='red', label='testing data')
-        axs[0].set_title('Our Random Forest')
-        axs[0].set_xlabel('Number of Training Data')
-        axs[0].set_ylabel(f'Percent {metric.capitalize()}')
-        axs[0].legend()
+    # Subplot for scikit-learn implementation
+    axs[1].plot(train_step, scilearn_results[metric]['train'], color='green', label='training data')
+    axs[1].plot(train_step, scilearn_results[metric]['test'], color='red', label='testing data')
+    axs[1].set_title('Scikit-learn Random Forest')
+    axs[1].set_xlabel('Number of Training Data')
+    axs[1].set_ylabel(f'Percent {metric.capitalize()}')
+    axs[1].legend()
 
-        # Subplot for scikit-learn implementation
-        axs[1].plot(train_step, scilearn_results[metric]['train'], color='green', label='training data')
-        axs[1].plot(train_step, scilearn_results[metric]['test'], color='red', label='testing data')
-        axs[1].set_title('Scikit-learn Random Forest')
-        axs[1].set_xlabel('Number of Training Data')
-        axs[1].set_ylabel(f'Percent {metric.capitalize()}')
-        axs[1].legend()
-
-        # Display the figure with the subplots
-        plt.tight_layout()
-        plt.show()
+    # Display the figure with the subplots
+    plt.tight_layout()
+    plt.show()
 
 
