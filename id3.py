@@ -10,23 +10,22 @@ class Node:
         self.category = category
 
 class ID3:
-    def __init__(self, features, max_depth):
+    def __init__(self, features):
         self.tree = None
         self.features = features
-        self.max_depth = max_depth
     
     def fit(self, x, y):
         '''
         creates the tree
         '''
         most_common = mode(y.flatten())
-        self.tree = self.create_tree(x, y, features=np.arange(len(self.features)), category=most_common, depth=0)
+        self.tree = self.create_tree(x, y, features=np.arange(len(self.features)), category=most_common)
         return self.tree
     
-    def create_tree(self, x_train, y_train, features, category, depth):
+    def create_tree(self, x_train, y_train, features, category):
         
         # check empty data
-        if len(x_train) == 0 or depth == self.max_depth:
+        if len(x_train) == 0:
             return Node(checking_feature=None, is_leaf=True, category=category)  # decision node
         
         # check all examples belonging in one category
@@ -58,10 +57,10 @@ class ID3:
         new_features_indices = np.delete(features.flatten(), max_ig_idx)  # remove current feature
 
         root.left_child = self.create_tree(x_train=x_train_1, y_train=y_train_1, features=new_features_indices, 
-                                           category=m, depth=depth+1)  # go left for X = 1
+                                           category=m)  # go left for X = 1
         
         root.right_child = self.create_tree(x_train=x_train_0, y_train=y_train_0, features=new_features_indices,
-                                            category=m, depth=depth+1)  # go right for X = 0
+                                            category=m)  # go right for X = 0
         
         return root
 
