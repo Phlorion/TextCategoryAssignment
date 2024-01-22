@@ -1,4 +1,5 @@
 from id3 import *
+import csv
 from imdbDataSet import *
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
@@ -6,10 +7,11 @@ import sys
 import matplotlib.pyplot as plt
 import random
 import tensorflow as tf
+from keras.layers import TextVectorization
 from keras.preprocessing.sequence import pad_sequences
 from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
 
-def random_forest(x_train, y_train, x_test, y_test, fv_skip_top, fv_length, tree_number, tree_fv_length):
+def random_forest(x_train, y_train, x_test, y_test, fv_skip_top, fv_length, tree_number, tree_fv_length, min_ig):
 
     #create encoded feature vector (index of words)
     encoded_feature_vector = imdb.getFeatureVector(skip_top=fv_skip_top, num_words=fv_length)
@@ -55,7 +57,7 @@ def random_forest(x_train, y_train, x_test, y_test, fv_skip_top, fv_length, tree
     #create ID3 forest for the ensamble
     forest = []
     for i in range(tree_number):
-        id3_tree = ID3(features=encoded_tree_feature_vectors[i])
+        id3_tree = ID3(features=encoded_tree_feature_vectors[i], min_ig=min_ig)
         id3_tree.fit(train_examples, np.array(y_train))
         forest.append(id3_tree)
 
@@ -84,20 +86,22 @@ def random_forest(x_train, y_train, x_test, y_test, fv_skip_top, fv_length, tree
     #implement sklearn's random forest for comparison
     sl_random_forest = RandomForestClassifier(n_estimators=tree_number)
     sl_random_forest.fit(train_examples,np.array(y_train))
-    sl_random_forest_pred = sl_random_forest.predict(test_examples)
+    sklearn_random_forest_pred = sl_random_forest.predict(test_examples)
 
 
-    return y_test, majority_outcome, sl_random_forest_pred
+    return y_test, majority_outcome, sklearn_random_forest_pred
 
 #Ορισμός υπερπαραμέτρων
 sys.setrecursionlimit(3000)
 
 train_step = np.linspace(5000,25000,15,dtype=int)
 epoch_step = np.linspace(30,100,15,dtype=int)
-tree_number = 9
+tree_number = 23
 fv_skip_top = 75
-fv_length = 250
-tree_fv_length = 80
+fv_length = 800
+tree_fv_length = 300
+min_ig_for_split = 0.05 #used to determine the stopping point for id3 tree splits
+vocab_size = 15000
 
 
 #obtain imdb data 
@@ -116,9 +120,15 @@ our_results = {metric: {'train': [], 'test': []} for metric in metrics}
 sklearn_results = {metric: {'train': [], 'test': []} for metric in metrics}
 mlp_results = {metric: {'train': [], 'test': []} for metric in metrics}
 
+results = {
+    'our' : our_results,
+    'sklearn' : sklearn_results,
+    'mlp' : mlp_results
+}
+
 #create the mlp sequential model
 imdb_mlp = tf.keras.models.Sequential([
-    tf.keras.layers.Embedding(12000, 16),
+    tf.keras.layers.Embedding(vocab_size, 16),
     tf.keras.layers.GlobalAveragePooling1D(),
     tf.keras.layers.Dense(units=32, activation='relu'),
     tf.keras.layers.Dropout(rate=0.5),
@@ -129,7 +139,7 @@ imdb_mlp = tf.keras.models.Sequential([
 #compile the model
 imdb_mlp.compile(optimizer='adam',
             loss='binary_crossentropy',
-            metrics=['accuracy'])
+            metrics=['binary_accuracy'])
 
 
 for step in range(len(train_step)):
@@ -137,22 +147,20 @@ for step in range(len(train_step)):
     y_train = y_train_raw[:train_step[step]]
 
     #training data tests
-    y_test_train, y_pred_train_our, y_pred_train_sklearn = random_forest(x_train=x_train, y_train=y_train, x_test=x_train, y_test=y_train, fv_skip_top=fv_skip_top, fv_length=fv_length,tree_number=tree_number,tree_fv_length=tree_fv_length)
+    y_test_train, y_pred_train_our, y_pred_train_sklearn = random_forest(x_train=x_train, y_train=y_train, x_test=x_train, y_test=y_train, fv_skip_top=fv_skip_top, fv_length=fv_length,tree_number=tree_number,tree_fv_length=tree_fv_length, min_ig=min_ig_for_split)
     
     print("Data for training tests was gathered at step -> " + str(train_step[step]))
     #testing data tests
-    y_test_test, y_pred_test_our, y_pred_test_sklearn = random_forest(x_train=x_train, y_train=y_train, x_test=x_test_raw, y_test=y_test_raw, fv_skip_top=fv_skip_top, fv_length=fv_length,tree_number=tree_number,tree_fv_length=tree_fv_length)
+    y_test_test, y_pred_test_our, y_pred_test_sklearn = random_forest(x_train=x_train, y_train=y_train, x_test=x_test_raw, y_test=y_test_raw, fv_skip_top=fv_skip_top, fv_length=fv_length,tree_number=tree_number,tree_fv_length=tree_fv_length, min_ig=min_ig_for_split)
     print("Data for testing tests was gathered at step -> " + str(train_step[step]))
 
     #pad data sequences to fit into a specific size
-    mlp_train_data = pad_sequences(x_train, value=0, padding='post', maxlen=512)
-    mlp_test_data = pad_sequences(x_test_raw, value=0, padding='post', maxlen=512)
+    mlp_train_data = pad_sequences(x_train, value=0, padding='post', maxlen=2048)
+    mlp_test_data = pad_sequences(x_test_raw, value=0, padding='post', maxlen=2048)
 
 
-
-    #train the mlp model
-    #validation data is the testing data used similarly by the random forests classifiers.
-    imdb_mlp.fit(mlp_train_data, y_train, epochs=epoch_step[step], batch_size=512, validation_data=(mlp_test_data, y_test_raw))
+    #train the mlp model, we use a constant number of epochs to compare with the other implementations, the only variable here is the training data 
+    imdb_mlp.fit(mlp_train_data, y_train, epochs=30, batch_size=1024, validation_data=(mlp_test_data, y_test_raw)) #validation data is the testing data used similarly by the random forests classifiers.
 
     #obtain mlp model's predictions, if the probability is above 0.5 we consider it a positive classification, negative otherwise.
     #on training predictions
@@ -160,28 +168,89 @@ for step in range(len(train_step)):
     #on testing predictions
     y_pred_test_mlp = (imdb_mlp.predict(mlp_test_data) > 0.5).astype("int32")
 
-
-    print("Data from MLP Sequential model was gathered at epoch -> " + str(epoch_step[step]))
-
     for metric, func in metrics.items():
         #calculate metrics for our implementation
         our_results[metric]['train'].append(func(y_true=y_test_train, y_pred=y_pred_train_our))
         our_results[metric]['test'].append(func(y_true=y_test_test, y_pred=y_pred_test_our))
+        print('Calculated Our Metrics')
 
 
         #calculate metrics for sklearn implementation
         sklearn_results[metric]['train'].append(func(y_true=y_test_train, y_pred=y_pred_train_sklearn))
         sklearn_results[metric]['test'].append(func(y_true=y_test_test, y_pred=y_pred_test_sklearn))
+        print('Calculated SKLearn Metrics')
 
 
         #calculate metrics for the sequential mlp implementation 
         mlp_results[metric]['train'].append(func(y_true=y_test_train, y_pred=y_pred_train_mlp))
         mlp_results[metric]['test'].append(func(y_true=y_test_test, y_pred=y_pred_test_mlp))
+        print('Calculated MLP Metrics')
 
-print("Data collection for all training steps has been completed!")
-print("\n\n")
+print("Data collection for all training steps has been completed!\n")
+print('Gathering MLP Loss Data...\n')
+#gather loss data from mlp, increasing epochs with constant train and test data for each loop 
+mlp_train_data2 = pad_sequences(x_train_raw, value=0, padding='post', maxlen=2048)
+mlp_test_data2 = pad_sequences(x_test_raw, value=0, padding='post', maxlen=2048)
+for step in epoch_step:
+    mlp_history = imdb_mlp.fit(mlp_train_data2, y_train_raw, epochs=step, batch_size=1024, validation_data=(mlp_test_data2, y_test_raw))
+print('MLP Loss Data has been colected!\n')
 
 
+print("Writing data into csv files...\n\n")
+#write data results into the respective csv files
+accuracy_filename = 'RandomForest_Accuracy.csv'
+precision_filename = 'RandomForest_Precision.csv'
+recall_filename = 'RandomForest_Recall.csv'
+f1_filename = 'RandomForest_F1.csv'
+mlp_loss_filename = 'RandomForest_MLP_Loss.csv'
+
+#write the file with accuracy scores 
+with open(accuracy_filename, 'w', newline='') as csvfile:
+    writer = csv.writer(csvfile)
+    for result in results.keys():
+        writer.writerow(result + ' implementation')
+        writer.writerow(['Training Data Step'] + train_step)
+        writer.writerow(['Training Scores'] + results[result]['accuracy']['train'])
+        writer.writerow(['Testing Scores'] + results[result]['accuracy']['test'])
+        writer.writerow('\n')
+
+#write the file with precision scores
+with open(precision_filename, 'w', newline='') as csvfile:
+    writer = csv.writer(csvfile)
+    for result in results.keys():
+        writer.writerow(result + ' implementation')
+        writer.writerow(['Training Data Step'] + train_step)
+        writer.writerow(['Training Scores'] + results[result]['precision']['train'])
+        writer.writerow(['Testing Scores'] + results[result]['precision']['test'])
+        writer.writerow('\n')
+
+#write the file with recall scores
+with open(recall_filename, 'w', newline='') as csvfile:
+    writer = csv.writer(csvfile)
+    for result in results.keys():
+        writer.writerow(result + ' implementation')
+        writer.writerow(['Training Data Step'] + train_step)
+        writer.writerow(['Training Scores'] + results[result]['recall']['train'])
+        writer.writerow(['Testing Scores'] + results[result]['recall']['test'])
+        writer.writerow('\n')
+
+#write the file with f1 scores
+with open(f1_filename, 'w', newline='') as csvfile:
+    writer = csv.writer(csvfile)
+    for result in results.keys():
+        writer.writerow(result + ' implementation')
+        writer.writerow(['Training Data Step'] + train_step)
+        writer.writerow(['Training Scores'] + results[result]['f1']['train'])
+        writer.writerow(['Testing Scores'] + results[result]['f1']['test'])
+        writer.writerow('\n')
+
+#write the file with mlp losses
+with open(mlp_loss_filename, 'w', newline='') as csvfile:
+    writer = csv.writer(csvfile)
+    writer.writerow('MLP Losses based on epochs')
+    writer.writerow(['Epochs Step'] + epoch_step)
+    writer.writerow(['Training Loss'] + mlp_history.history['loss'])
+    writer.writerow(['Validation Loss'] + mlp_history.history['val_loss'])
 
 #plot the results
 for metric in metrics.keys():
@@ -190,7 +259,7 @@ for metric in metrics.keys():
     #subplot for our implementation
     axs[0].plot(train_step, our_results[metric]['train'], color='green', label='training data')
     axs[0].plot(train_step, our_results[metric]['test'], color='red', label='testing data')
-    axs[0].set_title('Our Random Forest')
+    axs[0].set_title('Our Random Forest (Constant 11 trees)')
     axs[0].set_xlabel('Number of Training Data')
     axs[0].set_ylabel(f'Percent {metric.capitalize()}')
     axs[0].legend()
@@ -198,16 +267,16 @@ for metric in metrics.keys():
     #subplot for scikit-learn implementation
     axs[1].plot(train_step, sklearn_results[metric]['train'], color='green', label='training data')
     axs[1].plot(train_step, sklearn_results[metric]['test'], color='red', label='testing data')
-    axs[1].set_title('Scikit-learn Random Forest')
+    axs[1].set_title('Scikit-learn Random Forest (Constant 11 trees)')
     axs[1].set_xlabel('Number of Training Data')
     axs[1].set_ylabel(f'Percent {metric.capitalize()}')
     axs[1].legend()
 
     #subplot for mlp implementation
-    axs[2].plot(epoch_step, mlp_results[metric]['train'], color='green', label='training data')
-    axs[2].plot(epoch_step, mlp_results[metric]['test'], color='red', label='testing data')
-    axs[2].set_title('Keras Sequential MLP')
-    axs[2].set_xlabel('Number of Epochs')
+    axs[2].plot(train_step, mlp_results[metric]['train'], color='green', label='training data')
+    axs[2].plot(train_step, mlp_results[metric]['test'], color='red', label='testing data')
+    axs[2].set_title('Keras Sequential MLP (Constant 30 epochs)')
+    axs[2].set_xlabel('Number of Training Data')
     axs[2].set_ylabel(f'Percent {metric.capitalize()}')
     axs[2].legend()
 
@@ -215,4 +284,11 @@ for metric in metrics.keys():
     plt.tight_layout()
     plt.show()
 
-
+    #plot the mlp loss based on epochs
+    plt.plot(epoch_step,mlp_history.history['loss'], color='blue', label='training data')
+    plt.plot(epoch_step,mlp_history.history['val_loss'], color='orange', label='validation data')
+    plt.set_title('Keras Sequential MLP (Constant all of the train-test data)')
+    plt.set_xlabel('Epochs')
+    plt.set_ylabel('Percent Loss')
+    plt.legend()
+    plt.show()

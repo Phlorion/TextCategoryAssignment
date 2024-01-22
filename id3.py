@@ -10,9 +10,10 @@ class Node:
         self.category = category
 
 class ID3:
-    def __init__(self, features):
+    def __init__(self, features, min_ig=0.01):
         self.tree = None
         self.features = features
+        self.min_ig = min_ig  # minimum information gain to continue splitting
     
     def fit(self, x, y):
         '''
@@ -42,6 +43,12 @@ class ID3:
             igs.append(self.calculate_ig(y_train.flatten(), [example[feat_index] for example in x_train]))
         
         max_ig_idx = np.argmax(np.array(igs).flatten())
+        max_ig = np.max(np.array(igs).flatten())
+        
+        # check information gain
+        if max_ig < self.min_ig:
+            return Node(checking_feature=None, is_leaf=True, category=mode(y_train.flatten()))
+        
         m = mode(y_train.flatten())  # most common category 
 
         root = Node(checking_feature=max_ig_idx)
@@ -63,6 +70,7 @@ class ID3:
                                             category=m)  # go right for X = 0
         
         return root
+
 
 
     @staticmethod
