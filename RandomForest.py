@@ -7,7 +7,6 @@ import sys
 import matplotlib.pyplot as plt
 import random
 import tensorflow as tf
-from keras.layers import TextVectorization
 from keras.preprocessing.sequence import pad_sequences
 from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
 
@@ -95,18 +94,19 @@ def random_forest(x_train, y_train, x_test, y_test, fv_skip_top, fv_length, tree
 sys.setrecursionlimit(3000)
 
 train_step = np.linspace(5000,25000,15,dtype=int)
-epoch_step = np.linspace(30,100,15,dtype=int)
+epoch_step = np.linspace(5,50,15,dtype=int)
 tree_number = 23
-fv_skip_top = 75
-fv_length = 800
+fv_skip_top = 50
+fv_length = 5000
 tree_fv_length = 300
 min_ig_for_split = 0.05 #used to determine the stopping point for id3 tree splits
 vocab_size = 15000
-
+max_sequence_length = 250
 
 #obtain imdb data 
 imdb = IMDB()
 (x_train_raw, y_train_raw), (x_test_raw, y_test_raw) = imdb.getTrainingData(skip_top=fv_skip_top, num_words=fv_length)
+
 
 #initialize metrics
 metrics = {
@@ -126,20 +126,18 @@ results = {
     'mlp' : mlp_results
 }
 
-#create the mlp sequential model
-imdb_mlp = tf.keras.models.Sequential([
-    tf.keras.layers.Embedding(vocab_size, 16),
-    tf.keras.layers.GlobalAveragePooling1D(),
-    tf.keras.layers.Dense(units=32, activation='relu'),
-    tf.keras.layers.Dropout(rate=0.5),
-    tf.keras.layers.Dense(units=32, activation='relu'),
-    tf.keras.layers.Dropout(rate=0.5),
-    tf.keras.layers.Dense(units=1, activation='sigmoid')  #binary classification
+
+#create the rnn with gru layers sequential model
+imdb_rnn_with_gru = tf.keras.models.Sequential([
+    tf.keras.layers.Embedding(vocab_size, output_dim = 32, input_length = max_sequence_length), #embedding layer
+    tf.keras.layers.GRU(units=32),#gru layer 1
+    tf.keras.layers.Dense(units=1, activation='sigmoid')  #output layer, output = probability of classification in the positive category
 ])
+
 #compile the model
-imdb_mlp.compile(optimizer='adam',
+imdb_rnn_with_gru.compile(optimizer='adam',
             loss='binary_crossentropy',
-            metrics=['binary_accuracy'])
+            metrics=['accuracy'])
 
 
 for step in range(len(train_step)):
@@ -155,18 +153,18 @@ for step in range(len(train_step)):
     print("Data for testing tests was gathered at step -> " + str(train_step[step]))
 
     #pad data sequences to fit into a specific size
-    mlp_train_data = pad_sequences(x_train, value=0, padding='post', maxlen=2048)
-    mlp_test_data = pad_sequences(x_test_raw, value=0, padding='post', maxlen=2048)
+    mlp_train_data = pad_sequences(sequences=x_train, maxlen=max_sequence_length)
+    mlp_test_data = pad_sequences(sequences=x_test_raw, maxlen=max_sequence_length)
 
 
     #train the mlp model, we use a constant number of epochs to compare with the other implementations, the only variable here is the training data 
-    imdb_mlp.fit(mlp_train_data, y_train, epochs=30, batch_size=1024, validation_data=(mlp_test_data, y_test_raw)) #validation data is the testing data used similarly by the random forests classifiers.
+    imdb_rnn_with_gru.fit(mlp_train_data, y_train, epochs=10, batch_size=1024, validation_split=0.2)
 
     #obtain mlp model's predictions, if the probability is above 0.5 we consider it a positive classification, negative otherwise.
     #on training predictions
-    y_pred_train_mlp = (imdb_mlp.predict(mlp_train_data) > 0.5).astype("int32")
+    y_pred_train_mlp = (imdb_rnn_with_gru.predict(mlp_train_data) > 0.5).astype("int32")
     #on testing predictions
-    y_pred_test_mlp = (imdb_mlp.predict(mlp_test_data) > 0.5).astype("int32")
+    y_pred_test_mlp = (imdb_rnn_with_gru.predict(mlp_test_data) > 0.5).astype("int32")
 
     for metric, func in metrics.items():
         #calculate metrics for our implementation
@@ -189,10 +187,11 @@ for step in range(len(train_step)):
 print("Data collection for all training steps has been completed!\n")
 print('Gathering MLP Loss Data...\n')
 #gather loss data from mlp, increasing epochs with constant train and test data for each loop 
-mlp_train_data2 = pad_sequences(x_train_raw, value=0, padding='post', maxlen=2048)
-mlp_test_data2 = pad_sequences(x_test_raw, value=0, padding='post', maxlen=2048)
+
+mlp_train_data2 = pad_sequences(sequences=x_train_raw, maxlen=max_sequence_length)
+mlp_test_data2 = pad_sequences(sequences=x_test_raw, maxlen=max_sequence_length)
 for step in epoch_step:
-    mlp_history = imdb_mlp.fit(mlp_train_data2, y_train_raw, epochs=step, batch_size=1024, validation_data=(mlp_test_data2, y_test_raw))
+    mlp_history = imdb_rnn_with_gru.fit(mlp_train_data2, y_train_raw, epochs=step, batch_size=1024, validation_split=0.2)
 print('MLP Loss Data has been colected!\n')
 
 
@@ -208,49 +207,49 @@ mlp_loss_filename = 'RandomForest_MLP_Loss.csv'
 with open(accuracy_filename, 'w', newline='') as csvfile:
     writer = csv.writer(csvfile)
     for result in results.keys():
-        writer.writerow(result + ' implementation')
-        writer.writerow(['Training Data Step'] + train_step)
-        writer.writerow(['Training Scores'] + results[result]['accuracy']['train'])
-        writer.writerow(['Testing Scores'] + results[result]['accuracy']['test'])
-        writer.writerow('\n')
+        writer.writerows(result + ' implementation')
+        writer.writerows(['Training Data Step'] + train_step)
+        writer.writerows(['Training Scores'] + results[result]['accuracy']['train'])
+        writer.writerows(['Testing Scores'] + results[result]['accuracy']['test'])
+        writer.writerows('\n')
 
 #write the file with precision scores
 with open(precision_filename, 'w', newline='') as csvfile:
     writer = csv.writer(csvfile)
     for result in results.keys():
-        writer.writerow(result + ' implementation')
-        writer.writerow(['Training Data Step'] + train_step)
-        writer.writerow(['Training Scores'] + results[result]['precision']['train'])
-        writer.writerow(['Testing Scores'] + results[result]['precision']['test'])
-        writer.writerow('\n')
+        writer.writerows(result + ' implementation')
+        writer.writerows(['Training Data Step'] + train_step)
+        writer.writerows(['Training Scores'] + results[result]['precision']['train'])
+        writer.writerows(['Testing Scores'] + results[result]['precision']['test'])
+        writer.writerows('\n')
 
 #write the file with recall scores
 with open(recall_filename, 'w', newline='') as csvfile:
     writer = csv.writer(csvfile)
     for result in results.keys():
-        writer.writerow(result + ' implementation')
-        writer.writerow(['Training Data Step'] + train_step)
-        writer.writerow(['Training Scores'] + results[result]['recall']['train'])
-        writer.writerow(['Testing Scores'] + results[result]['recall']['test'])
-        writer.writerow('\n')
+        writer.writerows(result + ' implementation')
+        writer.writerows(['Training Data Step'] + train_step)
+        writer.writerows(['Training Scores'] + results[result]['recall']['train'])
+        writer.writerows(['Testing Scores'] + results[result]['recall']['test'])
+        writer.writerows('\n')
 
 #write the file with f1 scores
 with open(f1_filename, 'w', newline='') as csvfile:
     writer = csv.writer(csvfile)
     for result in results.keys():
-        writer.writerow(result + ' implementation')
-        writer.writerow(['Training Data Step'] + train_step)
-        writer.writerow(['Training Scores'] + results[result]['f1']['train'])
-        writer.writerow(['Testing Scores'] + results[result]['f1']['test'])
-        writer.writerow('\n')
+        writer.writerows(result + ' implementation')
+        writer.writerows(['Training Data Step'] + train_step)
+        writer.writerows(['Training Scores'] + results[result]['f1']['train'])
+        writer.writerows(['Testing Scores'] + results[result]['f1']['test'])
+        writer.writerows('\n')
 
 #write the file with mlp losses
 with open(mlp_loss_filename, 'w', newline='') as csvfile:
     writer = csv.writer(csvfile)
-    writer.writerow('MLP Losses based on epochs')
-    writer.writerow(['Epochs Step'] + epoch_step)
-    writer.writerow(['Training Loss'] + mlp_history.history['loss'])
-    writer.writerow(['Validation Loss'] + mlp_history.history['val_loss'])
+    writer.writerows('MLP Losses based on epochs')
+    writer.writerows(['Epochs Step'] + epoch_step)
+    writer.writerows(['Training Loss'] + mlp_history.history['loss'])
+    writer.writerows(['Validation Loss'] + mlp_history.history['val_loss'])
 
 #plot the results
 for metric in metrics.keys():
