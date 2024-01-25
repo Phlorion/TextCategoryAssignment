@@ -94,13 +94,12 @@ def random_forest(x_train, y_train, x_test, y_test, fv_skip_top, fv_length, tree
 sys.setrecursionlimit(3000)
 
 train_step = np.linspace(5000,25000,15,dtype=int)
-epoch_step = np.linspace(5,50,15,dtype=int)
 tree_number = 23
 fv_skip_top = 50
-fv_length = 5000
-tree_fv_length = 500
+fv_length = 1000
+tree_fv_length = 300
 min_ig_for_split = 0.05 #used to determine the stopping point for id3 tree splits
-vocab_size = 15000
+vocab_size = 5000
 max_sequence_length = 250
 
 #obtain imdb data 
@@ -127,10 +126,6 @@ results = {
 }
 
 
-
-
-
-
 for step in range(len(train_step)):
     x_train = x_train_raw[:train_step[step]]
     y_train = y_train_raw[:train_step[step]]
@@ -150,8 +145,10 @@ for step in range(len(train_step)):
     #create the rnn with gru layers sequential model
     imdb_rnn_with_gru = tf.keras.models.Sequential([
         tf.keras.layers.Embedding(vocab_size, output_dim = 32, input_length = max_sequence_length), #embedding layer
-        tf.keras.layers.GRU(units=32, dropout= 0.2),#gru layer 1
+        tf.keras.layers.GRU(units=32, dropout=0.3, return_sequences = True),#gru layer 1
+        tf.keras.layers.GRU(units=32, dropout=0.3, return_sequences = False),#gru layer 2
         tf.keras.layers.Dense(units=1, activation='sigmoid')  #output layer, output = probability of classification in the positive category
+
     ])
     #compile the model
     imdb_rnn_with_gru.compile(optimizer='adam',
@@ -187,13 +184,17 @@ for step in range(len(train_step)):
         print('Calculated RNN ' + metric)
 
 print("Data collection for all training steps has been completed!\n")
+
+
 print('Gathering RNN Loss Data...\n')
 #gather loss data from rnn, increasing epochs with constant train and test data for each loop 
+
 
 #create the rnn with gru layers sequential model again
 imdb_rnn_with_gru = tf.keras.models.Sequential([
     tf.keras.layers.Embedding(vocab_size, output_dim = 32, input_length = max_sequence_length), #embedding layer
-    tf.keras.layers.GRU(units=32, dropout= 0.2),#gru layer 1
+    tf.keras.layers.GRU(units=32, dropout=0.3, return_sequences = True),#gru layer 1
+    tf.keras.layers.GRU(units=32, dropout=0.3, return_sequences = False),#gru layer 2
     tf.keras.layers.Dense(units=1, activation='sigmoid')  #output layer, output = probability of classification in the positive category
 ])
 
@@ -205,36 +206,26 @@ imdb_rnn_with_gru.compile(optimizer='adam',
 rnn_train_data2 = pad_sequences(sequences=x_train_raw, maxlen=max_sequence_length)
 rnn_test_data2 = pad_sequences(sequences=x_test_raw, maxlen=max_sequence_length)
 #run the fit method again for the last step in epoch_step
-rnn_history = imdb_rnn_with_gru.fit(rnn_train_data2, y_train_raw, epochs=epoch_step[-1], batch_size=1024, validation_data=(rnn_test_data, y_test_raw))
+rnn_history = imdb_rnn_with_gru.fit(rnn_train_data2, y_train_raw, epochs=20, batch_size=1024, validation_data=(rnn_test_data, y_test_raw))
+
 print('RNN Loss Data has been colected!\n')
 
+#write results for accuracy,precision,recall,f1 scores.
+print("Writing results...\n\n")
+for metric in metrics.keys():
+    print( metric.capitalize() + ' Results')
+    print('Train Step: ' + [str(step) for step in train_step])
+    for result in results.keys():
+        print(result + 'implementation')
+        print('Train Results: ' + [str(val) for val in results[result][metric]['train']])
+        print('Test Results: ' + [str(val) for val in results[result][metric]['test']])
 
-print("Writing data into csv files...\n\n")
-#write data results into the respective csv files
-file_names = ['RandomForest_Accuracy.csv'
-'RandomForest_Precision.csv'
-'RandomForest_Recall.csv'
-'RandomForest_F1.csv']
-rnn_loss_file = 'RandomForest_rnn_Loss.csv'
 
-#write the files with accuracy,precision,recall and f1 scores 
-for file in file_names:
-    with open(file, 'w', newline='') as csvfile:
-        writer = csv.writer(csvfile)
-        for result in results.keys():
-            writer.writerows(result + ' implementation')
-            writer.writerows(['Training Data Step'] + [str(step) for step in train_step])
-            writer.writerows(['Training Scores'] + [str(value) for value in results[result]['accuracy']['train']])
-            writer.writerows(['Testing Scores'] + [str(value) for value in results[result]['accuracy']['test']])
-            writer.writerows('\n')
-
-#write the file with rnn losses
-with open(rnn_loss_file, 'w', newline='') as csvfile:
-    writer = csv.writer(csvfile)
-    writer.writerows('RNN Losses based on epochs')
-    writer.writerows(['Epochs Step'] + [str(step) for step in epoch_step])
-    writer.writerows(['Training Loss'] + [str(loss) for loss in rnn_history.history['loss']])
-    writer.writerows(['Validation Loss'] + [str(val_loss) for val_loss in rnn_history.history['val_loss']])
+#write results for rnn losses
+print('\n\nRNN with GRU Loss Data')
+print('Epochs: ' + [str(epoch) for epoch in np.linspace(1,20,20,dtype=int)])
+print('Loss: ' + [str(loss) for loss in rnn_history.history['loss']])
+print('Validation Loss: ' + [str(loss) for loss in rnn_history.history['val_loss']])
 
 #plot the results
 for metric in metrics.keys():
@@ -269,8 +260,8 @@ for metric in metrics.keys():
     plt.show()
 
     #plot the rnn loss based on epochs
-    plt.plot(epoch_step,rnn_history.history['loss'], color='blue', label='training data')
-    plt.plot(epoch_step,rnn_history.history['val_loss'], color='orange', label='validation data')
+    plt.plot(np.linspace(1,20,20,dtype=int),rnn_history.history['loss'], color='blue', label='training data')
+    plt.plot(np.linspace(1,20,20,dtype=int),rnn_history.history['val_loss'], color='orange', label='validation data')
     plt.set_title('Keras Sequential rnn (Constant all of the train-test data)')
     plt.set_xlabel('Epochs')
     plt.set_ylabel('Percent Loss')
