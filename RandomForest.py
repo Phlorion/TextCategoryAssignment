@@ -118,12 +118,12 @@ metrics = {
 
 our_results = {metric: {'train': [], 'test': []} for metric in metrics}
 sklearn_results = {metric: {'train': [], 'test': []} for metric in metrics}
-mlp_results = {metric: {'train': [], 'test': []} for metric in metrics}
+rnn_results = {metric: {'train': [], 'test': []} for metric in metrics}
 
 results = {
     'our' : our_results,
     'sklearn' : sklearn_results,
-    'mlp' : mlp_results
+    'rnn' : rnn_results
 }
 
 
@@ -153,18 +153,18 @@ for step in range(len(train_step)):
     print("Data for testing tests was gathered at step -> " + str(train_step[step]))
 
     #pad data sequences to fit into a specific size
-    mlp_train_data = pad_sequences(sequences=x_train, maxlen=max_sequence_length)
-    mlp_test_data = pad_sequences(sequences=x_test_raw, maxlen=max_sequence_length)
+    rnn_train_data = pad_sequences(sequences=x_train, maxlen=max_sequence_length)
+    rnn_test_data = pad_sequences(sequences=x_test_raw, maxlen=max_sequence_length)
 
 
-    #train the mlp model, we use a constant number of epochs to compare with the other implementations, the only variable here is the training data 
-    imdb_rnn_with_gru.fit(mlp_train_data, y_train, epochs=10, batch_size=1024, validation_split=0.2)
+    #train the rnn model, we use a constant number of epochs to compare with the other implementations, the only variable here is the training data 
+    imdb_rnn_with_gru.fit(rnn_train_data, y_train, epochs=10, batch_size=1024, validation_split=0.2)
 
-    #obtain mlp model's predictions, if the probability is above 0.5 we consider it a positive classification, negative otherwise.
+    #obtain rnn model's predictions, if the probability is above 0.5 we consider it a positive classification, negative otherwise.
     #on training predictions
-    y_pred_train_mlp = (imdb_rnn_with_gru.predict(mlp_train_data) > 0.5).astype("int32")
+    y_pred_train_rnn = (imdb_rnn_with_gru.predict(rnn_train_data) > 0.5).astype("int32")
     #on testing predictions
-    y_pred_test_mlp = (imdb_rnn_with_gru.predict(mlp_test_data) > 0.5).astype("int32")
+    y_pred_test_rnn = (imdb_rnn_with_gru.predict(rnn_test_data) > 0.5).astype("int32")
 
     for metric, func in metrics.items():
         #calculate metrics for our implementation
@@ -179,77 +179,52 @@ for step in range(len(train_step)):
         print('Calculated SKLearn Metrics')
 
 
-        #calculate metrics for the sequential mlp implementation 
-        mlp_results[metric]['train'].append(func(y_true=y_test_train, y_pred=y_pred_train_mlp))
-        mlp_results[metric]['test'].append(func(y_true=y_test_test, y_pred=y_pred_test_mlp))
-        print('Calculated MLP Metrics')
+        #calculate metrics for the sequential rnn implementation 
+        rnn_results[metric]['train'].append(func(y_true=y_test_train, y_pred=y_pred_train_rnn))
+        rnn_results[metric]['test'].append(func(y_true=y_test_test, y_pred=y_pred_test_rnn))
+        print('Calculated RNN Metrics')
 
 print("Data collection for all training steps has been completed!\n")
-print('Gathering MLP Loss Data...\n')
-#gather loss data from mlp, increasing epochs with constant train and test data for each loop 
+print('Gathering RNN Loss Data...\n')
+#gather loss data from rnn, increasing epochs with constant train and test data for each loop 
+#compile the model again
+imdb_rnn_with_gru.compile(optimizer='adam',
+            loss='binary_crossentropy',
+            metrics=['accuracy'])
 
-mlp_train_data2 = pad_sequences(sequences=x_train_raw, maxlen=max_sequence_length)
-mlp_test_data2 = pad_sequences(sequences=x_test_raw, maxlen=max_sequence_length)
+rnn_train_data2 = pad_sequences(sequences=x_train_raw, maxlen=max_sequence_length)
+rnn_test_data2 = pad_sequences(sequences=x_test_raw, maxlen=max_sequence_length)
 for step in epoch_step:
-    mlp_history = imdb_rnn_with_gru.fit(mlp_train_data2, y_train_raw, epochs=step, batch_size=1024, validation_split=0.2)
-print('MLP Loss Data has been colected!\n')
+    rnn_history = imdb_rnn_with_gru.fit(rnn_train_data2, y_train_raw, epochs=step, batch_size=1024, validation_split=0.2)
+print('RNN Loss Data has been colected!\n')
 
 
 print("Writing data into csv files...\n\n")
 #write data results into the respective csv files
-accuracy_filename = 'RandomForest_Accuracy.csv'
-precision_filename = 'RandomForest_Precision.csv'
-recall_filename = 'RandomForest_Recall.csv'
-f1_filename = 'RandomForest_F1.csv'
-mlp_loss_filename = 'RandomForest_MLP_Loss.csv'
+file_names = ['RandomForest_Accuracy.csv'
+'RandomForest_Precision.csv'
+'RandomForest_Recall.csv'
+'RandomForest_F1.csv']
+rnn_loss_file = 'RandomForest_rnn_Loss.csv'
 
-#write the file with accuracy scores 
-with open(accuracy_filename, 'w', newline='') as csvfile:
-    writer = csv.writer(csvfile)
-    for result in results.keys():
-        writer.writerows(result + ' implementation')
-        writer.writerows(['Training Data Step'] + train_step)
-        writer.writerows(['Training Scores'] + results[result]['accuracy']['train'])
-        writer.writerows(['Testing Scores'] + results[result]['accuracy']['test'])
-        writer.writerows('\n')
+#write the files with accuracy,precision,recall and f1 scores 
+for file in file_names:
+    with open(file, 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        for result in results.keys():
+            writer.writerows(result + ' implementation')
+            writer.writerows(['Training Data Step'] + [str(step) for step in train_step])
+            writer.writerows(['Training Scores'] + [str(value) for value in results[result]['accuracy']['train']])
+            writer.writerows(['Testing Scores'] + [str(value) for value in results[result]['accuracy']['test']])
+            writer.writerows('\n')
 
-#write the file with precision scores
-with open(precision_filename, 'w', newline='') as csvfile:
+#write the file with rnn losses
+with open(rnn_loss_file, 'w', newline='') as csvfile:
     writer = csv.writer(csvfile)
-    for result in results.keys():
-        writer.writerows(result + ' implementation')
-        writer.writerows(['Training Data Step'] + train_step)
-        writer.writerows(['Training Scores'] + results[result]['precision']['train'])
-        writer.writerows(['Testing Scores'] + results[result]['precision']['test'])
-        writer.writerows('\n')
-
-#write the file with recall scores
-with open(recall_filename, 'w', newline='') as csvfile:
-    writer = csv.writer(csvfile)
-    for result in results.keys():
-        writer.writerows(result + ' implementation')
-        writer.writerows(['Training Data Step'] + train_step)
-        writer.writerows(['Training Scores'] + results[result]['recall']['train'])
-        writer.writerows(['Testing Scores'] + results[result]['recall']['test'])
-        writer.writerows('\n')
-
-#write the file with f1 scores
-with open(f1_filename, 'w', newline='') as csvfile:
-    writer = csv.writer(csvfile)
-    for result in results.keys():
-        writer.writerows(result + ' implementation')
-        writer.writerows(['Training Data Step'] + train_step)
-        writer.writerows(['Training Scores'] + results[result]['f1']['train'])
-        writer.writerows(['Testing Scores'] + results[result]['f1']['test'])
-        writer.writerows('\n')
-
-#write the file with mlp losses
-with open(mlp_loss_filename, 'w', newline='') as csvfile:
-    writer = csv.writer(csvfile)
-    writer.writerows('MLP Losses based on epochs')
-    writer.writerows(['Epochs Step'] + epoch_step)
-    writer.writerows(['Training Loss'] + mlp_history.history['loss'])
-    writer.writerows(['Validation Loss'] + mlp_history.history['val_loss'])
+    writer.writerows('RNN Losses based on epochs')
+    writer.writerows(['Epochs Step'] + [str(step) for step in epoch_step])
+    writer.writerows(['Training Loss'] + [str(loss) for loss in rnn_history.history['loss']])
+    writer.writerows(['Validation Loss'] + [str(val_loss) for val_loss in rnn_history.history['val_loss']])
 
 #plot the results
 for metric in metrics.keys():
@@ -271,10 +246,10 @@ for metric in metrics.keys():
     axs[1].set_ylabel(f'Percent {metric.capitalize()}')
     axs[1].legend()
 
-    #subplot for mlp implementation
-    axs[2].plot(train_step, mlp_results[metric]['train'], color='green', label='training data')
-    axs[2].plot(train_step, mlp_results[metric]['test'], color='red', label='testing data')
-    axs[2].set_title('Keras Sequential MLP (Constant 30 epochs)')
+    #subplot for rnn implementation
+    axs[2].plot(train_step, rnn_results[metric]['train'], color='green', label='training data')
+    axs[2].plot(train_step, rnn_results[metric]['test'], color='red', label='testing data')
+    axs[2].set_title('Keras Sequential rnn (Constant 30 epochs)')
     axs[2].set_xlabel('Number of Training Data')
     axs[2].set_ylabel(f'Percent {metric.capitalize()}')
     axs[2].legend()
@@ -283,10 +258,10 @@ for metric in metrics.keys():
     plt.tight_layout()
     plt.show()
 
-    #plot the mlp loss based on epochs
-    plt.plot(epoch_step,mlp_history.history['loss'], color='blue', label='training data')
-    plt.plot(epoch_step,mlp_history.history['val_loss'], color='orange', label='validation data')
-    plt.set_title('Keras Sequential MLP (Constant all of the train-test data)')
+    #plot the rnn loss based on epochs
+    plt.plot(epoch_step,rnn_history.history['loss'], color='blue', label='training data')
+    plt.plot(epoch_step,rnn_history.history['val_loss'], color='orange', label='validation data')
+    plt.set_title('Keras Sequential rnn (Constant all of the train-test data)')
     plt.set_xlabel('Epochs')
     plt.set_ylabel('Percent Loss')
     plt.legend()
