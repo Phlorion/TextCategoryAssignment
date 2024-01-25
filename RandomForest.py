@@ -98,7 +98,7 @@ epoch_step = np.linspace(5,50,15,dtype=int)
 tree_number = 23
 fv_skip_top = 50
 fv_length = 5000
-tree_fv_length = 300
+tree_fv_length = 500
 min_ig_for_split = 0.05 #used to determine the stopping point for id3 tree splits
 vocab_size = 15000
 max_sequence_length = 250
@@ -127,17 +127,8 @@ results = {
 }
 
 
-#create the rnn with gru layers sequential model
-imdb_rnn_with_gru = tf.keras.models.Sequential([
-    tf.keras.layers.Embedding(vocab_size, output_dim = 32, input_length = max_sequence_length), #embedding layer
-    tf.keras.layers.GRU(units=32),#gru layer 1
-    tf.keras.layers.Dense(units=1, activation='sigmoid')  #output layer, output = probability of classification in the positive category
-])
 
-#compile the model
-imdb_rnn_with_gru.compile(optimizer='adam',
-            loss='binary_crossentropy',
-            metrics=['accuracy'])
+
 
 
 for step in range(len(train_step)):
@@ -156,9 +147,20 @@ for step in range(len(train_step)):
     rnn_train_data = pad_sequences(sequences=x_train, maxlen=max_sequence_length)
     rnn_test_data = pad_sequences(sequences=x_test_raw, maxlen=max_sequence_length)
 
+    #create the rnn with gru layers sequential model
+    imdb_rnn_with_gru = tf.keras.models.Sequential([
+        tf.keras.layers.Embedding(vocab_size, output_dim = 32, input_length = max_sequence_length), #embedding layer
+        tf.keras.layers.GRU(units=32, dropout= 0.2),#gru layer 1
+        tf.keras.layers.Dense(units=1, activation='sigmoid')  #output layer, output = probability of classification in the positive category
+    ])
+    #compile the model
+    imdb_rnn_with_gru.compile(optimizer='adam',
+            loss='binary_crossentropy',
+            metrics=['binary_accuracy'])
+
 
     #train the rnn model, we use a constant number of epochs to compare with the other implementations, the only variable here is the training data 
-    imdb_rnn_with_gru.fit(rnn_train_data, y_train, epochs=10, batch_size=1024, validation_split=0.2)
+    imdb_rnn_with_gru.fit(rnn_train_data, y_train, epochs=10, batch_size=1024, validation_data=(rnn_test_data, y_test_raw))
 
     #obtain rnn model's predictions, if the probability is above 0.5 we consider it a positive classification, negative otherwise.
     #on training predictions
@@ -170,32 +172,40 @@ for step in range(len(train_step)):
         #calculate metrics for our implementation
         our_results[metric]['train'].append(func(y_true=y_test_train, y_pred=y_pred_train_our))
         our_results[metric]['test'].append(func(y_true=y_test_test, y_pred=y_pred_test_our))
-        print('Calculated Our Metrics')
+        print('Calculated Our ' + metric)
 
 
         #calculate metrics for sklearn implementation
         sklearn_results[metric]['train'].append(func(y_true=y_test_train, y_pred=y_pred_train_sklearn))
         sklearn_results[metric]['test'].append(func(y_true=y_test_test, y_pred=y_pred_test_sklearn))
-        print('Calculated SKLearn Metrics')
+        print('Calculated SKLearn ' + metric)
 
 
         #calculate metrics for the sequential rnn implementation 
         rnn_results[metric]['train'].append(func(y_true=y_test_train, y_pred=y_pred_train_rnn))
         rnn_results[metric]['test'].append(func(y_true=y_test_test, y_pred=y_pred_test_rnn))
-        print('Calculated RNN Metrics')
+        print('Calculated RNN ' + metric)
 
 print("Data collection for all training steps has been completed!\n")
 print('Gathering RNN Loss Data...\n')
 #gather loss data from rnn, increasing epochs with constant train and test data for each loop 
+
+#create the rnn with gru layers sequential model again
+imdb_rnn_with_gru = tf.keras.models.Sequential([
+    tf.keras.layers.Embedding(vocab_size, output_dim = 32, input_length = max_sequence_length), #embedding layer
+    tf.keras.layers.GRU(units=32, dropout= 0.2),#gru layer 1
+    tf.keras.layers.Dense(units=1, activation='sigmoid')  #output layer, output = probability of classification in the positive category
+])
+
 #compile the model again
 imdb_rnn_with_gru.compile(optimizer='adam',
             loss='binary_crossentropy',
-            metrics=['accuracy'])
+            metrics=['binary_accuracy'])
 
 rnn_train_data2 = pad_sequences(sequences=x_train_raw, maxlen=max_sequence_length)
 rnn_test_data2 = pad_sequences(sequences=x_test_raw, maxlen=max_sequence_length)
-for step in epoch_step:
-    rnn_history = imdb_rnn_with_gru.fit(rnn_train_data2, y_train_raw, epochs=step, batch_size=1024, validation_split=0.2)
+#run the fit method again for the last step in epoch_step
+rnn_history = imdb_rnn_with_gru.fit(rnn_train_data2, y_train_raw, epochs=epoch_step[-1], batch_size=1024, validation_data=(rnn_test_data, y_test_raw))
 print('RNN Loss Data has been colected!\n')
 
 
