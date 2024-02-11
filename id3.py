@@ -10,10 +10,11 @@ class Node:
         self.category = category
 
 class ID3:
-    def __init__(self, features, min_ig=0.01):
+    def __init__(self, features, min_ig=0.01, majority_percentage=0.95):
         self.tree = None
         self.features = features
         self.min_ig = min_ig  # minimum information gain to continue splitting
+        self.majority_percentage = majority_percentage  # majority percentage for early stopping
     
     def fit(self, x, y):
         '''
@@ -34,6 +35,10 @@ class ID3:
             return Node(checking_feature=None, is_leaf=True, category=0)
         elif np.all(y_train.flatten() == 1):
             return Node(checking_feature=None, is_leaf=True, category=1)
+        
+        # check majority percentage for early stopping
+        if np.max(np.bincount(y_train.flatten())) / len(y_train.flatten()) >= self.majority_percentage:
+            return Node(checking_feature=None, is_leaf=True, category=mode(y_train.flatten()))
         
         if len(features) == 0:
             return Node(checking_feature=None, is_leaf=True, category=mode(y_train.flatten()))
@@ -71,8 +76,6 @@ class ID3:
         
         return root
 
-
-
     @staticmethod
     def calculate_ig(classes_vector, feature):
         classes = set(classes_vector)
@@ -81,7 +84,6 @@ class ID3:
         for c in classes:
             PC = list(classes_vector).count(c) / len(classes_vector)  # P(C=c)
             HC += - PC * math.log(PC, 2)  # H(C)
-            # print('Overall Entropy:', HC)  # entropy for C variable
             
         feature_values = set(feature)  # 0 or 1 in this example
         HC_feature = 0
@@ -101,7 +103,8 @@ class ID3:
                     HC_feature += temp_H
         
         ig = HC - HC_feature
-        return ig    
+        return ig
+
 
     def predict(self, x):
         predicted_classes = list()

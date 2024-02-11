@@ -10,7 +10,7 @@ import tensorflow as tf
 from keras.preprocessing.sequence import pad_sequences
 from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
 
-def random_forest(x_train, y_train, x_test, y_test, fv_skip_top, fv_length, tree_number, tree_fv_length, min_ig):
+def random_forest(x_train, y_train, x_test, y_test, fv_skip_top, fv_length, tree_number, tree_fv_length, min_ig, majority_percentage):
 
     #create encoded feature vector (index of words)
     encoded_feature_vector = imdb.getFeatureVector(skip_top=fv_skip_top, num_words=fv_length)
@@ -56,7 +56,7 @@ def random_forest(x_train, y_train, x_test, y_test, fv_skip_top, fv_length, tree
     #create ID3 forest for the ensamble
     forest = []
     for i in range(tree_number):
-        id3_tree = ID3(features=encoded_tree_feature_vectors[i], min_ig=min_ig)
+        id3_tree = ID3(features=encoded_tree_feature_vectors[i], min_ig=min_ig, majority_percentage=majority_for_split)
         id3_tree.fit(train_examples, np.array(y_train))
         forest.append(id3_tree)
 
@@ -83,9 +83,9 @@ def random_forest(x_train, y_train, x_test, y_test, fv_skip_top, fv_length, tree
 
 
     #implement sklearn's random forest for comparison
-    sl_random_forest = RandomForestClassifier(n_estimators=tree_number)
-    sl_random_forest.fit(train_examples,np.array(y_train))
-    sklearn_random_forest_pred = sl_random_forest.predict(test_examples)
+    sklearn_random_forest = RandomForestClassifier(n_estimators=tree_number)
+    sklearn_random_forest.fit(train_examples,np.array(y_train))
+    sklearn_random_forest_pred = sklearn_random_forest.predict(test_examples)
 
 
     return y_test, majority_outcome, sklearn_random_forest_pred
@@ -93,14 +93,15 @@ def random_forest(x_train, y_train, x_test, y_test, fv_skip_top, fv_length, tree
 #Ορισμός υπερπαραμέτρων
 sys.setrecursionlimit(3000)
 
-train_step = np.linspace(5000,25000,15,dtype=int)
-tree_number = 23
-fv_skip_top = 50
-fv_length = 1000
-tree_fv_length = 300
-min_ig_for_split = 0.05 #used to determine the stopping point for id3 tree splits
-vocab_size = 5000
-max_sequence_length = 250
+train_step = np.linspace(5000,25000,10,dtype=int)
+tree_number = 15
+fv_skip_top = 45
+fv_length = 600
+tree_fv_length = 450
+min_ig_for_split = 0.02 #used to determine the stopping point for id3 tree splits
+majority_for_split = 0.85 #used to determine an early stopping point for id3 tree splits 
+vocab_size = fv_length
+max_sequence_length = 512
 
 #obtain imdb data 
 imdb = IMDB()
@@ -131,11 +132,11 @@ for step in range(len(train_step)):
     y_train = y_train_raw[:train_step[step]]
 
     #training data tests
-    y_test_train, y_pred_train_our, y_pred_train_sklearn = random_forest(x_train=x_train, y_train=y_train, x_test=x_train, y_test=y_train, fv_skip_top=fv_skip_top, fv_length=fv_length,tree_number=tree_number,tree_fv_length=tree_fv_length, min_ig=min_ig_for_split)
+    y_test_train, y_pred_train_our, y_pred_train_sklearn = random_forest(x_train=x_train, y_train=y_train, x_test=x_train, y_test=y_train, fv_skip_top=fv_skip_top, fv_length=fv_length,tree_number=tree_number,tree_fv_length=tree_fv_length, min_ig=min_ig_for_split, majority_percentage=majority_for_split)
     
     print("Data for training tests was gathered at step -> " + str(train_step[step]))
     #testing data tests
-    y_test_test, y_pred_test_our, y_pred_test_sklearn = random_forest(x_train=x_train, y_train=y_train, x_test=x_test_raw, y_test=y_test_raw, fv_skip_top=fv_skip_top, fv_length=fv_length,tree_number=tree_number,tree_fv_length=tree_fv_length, min_ig=min_ig_for_split)
+    y_test_test, y_pred_test_our, y_pred_test_sklearn = random_forest(x_train=x_train, y_train=y_train, x_test=x_test_raw, y_test=y_test_raw, fv_skip_top=fv_skip_top, fv_length=fv_length,tree_number=tree_number,tree_fv_length=tree_fv_length, min_ig=min_ig_for_split, majority_percentage=majority_for_split)
     print("Data for testing tests was gathered at step -> " + str(train_step[step]))
 
     #pad data sequences to fit into a specific size
@@ -145,10 +146,9 @@ for step in range(len(train_step)):
     #create the rnn with gru layers sequential model
     imdb_rnn_with_gru = tf.keras.models.Sequential([
         tf.keras.layers.Embedding(vocab_size, output_dim = 32, input_length = max_sequence_length), #embedding layer
-        tf.keras.layers.GRU(units=32, dropout=0.3, return_sequences = True),#gru layer 1
-        tf.keras.layers.GRU(units=32, dropout=0.3, return_sequences = False),#gru layer 2
+        tf.keras.layers.GRU(units=32, dropout=0.2, return_sequences = False),#gru layer 1
+        tf.keras.layers.Dropout(rate=0.5),#dropout on last layer before output
         tf.keras.layers.Dense(units=1, activation='sigmoid')  #output layer, output = probability of classification in the positive category
-
     ])
     #compile the model
     imdb_rnn_with_gru.compile(optimizer='adam',
@@ -157,7 +157,7 @@ for step in range(len(train_step)):
 
 
     #train the rnn model, we use a constant number of epochs to compare with the other implementations, the only variable here is the training data 
-    imdb_rnn_with_gru.fit(rnn_train_data, y_train, epochs=10, batch_size=1024, validation_data=(rnn_test_data, y_test_raw))
+    imdb_rnn_with_gru.fit(rnn_train_data, y_train, epochs=15, batch_size=1024, validation_data=(rnn_test_data, y_test_raw))
 
     #obtain rnn model's predictions, if the probability is above 0.5 we consider it a positive classification, negative otherwise.
     #on training predictions
@@ -170,18 +170,34 @@ for step in range(len(train_step)):
         our_results[metric]['train'].append(func(y_true=y_test_train, y_pred=y_pred_train_our))
         our_results[metric]['test'].append(func(y_true=y_test_test, y_pred=y_pred_test_our))
         print('Calculated Our ' + metric)
-
+        templist_train = [str(val) for val in our_results[metric]['train']]
+        templist_test = [str(val) for val in our_results[metric]['test']]
+        print('Train: ')
+        print(templist_train)
+        print('Test: ')
+        print(templist_test)
 
         #calculate metrics for sklearn implementation
         sklearn_results[metric]['train'].append(func(y_true=y_test_train, y_pred=y_pred_train_sklearn))
         sklearn_results[metric]['test'].append(func(y_true=y_test_test, y_pred=y_pred_test_sklearn))
         print('Calculated SKLearn ' + metric)
-
+        templist_train = [str(val) for val in sklearn_results[metric]['train']]
+        templist_test = [str(val) for val in sklearn_results[metric]['test']]
+        print('Train: ')
+        print(templist_train)
+        print('Test: ')
+        print(templist_test)
 
         #calculate metrics for the sequential rnn implementation 
         rnn_results[metric]['train'].append(func(y_true=y_test_train, y_pred=y_pred_train_rnn))
         rnn_results[metric]['test'].append(func(y_true=y_test_test, y_pred=y_pred_test_rnn))
         print('Calculated RNN ' + metric)
+        templist_train = [str(val) for val in rnn_results[metric]['train']]
+        templist_test = [str(val) for val in rnn_results[metric]['test']]
+        print('Train: ')
+        print(templist_train)
+        print('Test: ')
+        print(templist_test)
 
 print("Data collection for all training steps has been completed!\n")
 
@@ -193,8 +209,8 @@ print('Gathering RNN Loss Data...\n')
 #create the rnn with gru layers sequential model again
 imdb_rnn_with_gru = tf.keras.models.Sequential([
     tf.keras.layers.Embedding(vocab_size, output_dim = 32, input_length = max_sequence_length), #embedding layer
-    tf.keras.layers.GRU(units=32, dropout=0.3, return_sequences = True),#gru layer 1
-    tf.keras.layers.GRU(units=32, dropout=0.3, return_sequences = False),#gru layer 2
+    tf.keras.layers.GRU(units=32, dropout=0.2, return_sequences = False),#gru layer 1
+    tf.keras.layers.Dropout(rate=0.5),#dropout on last layer before output
     tf.keras.layers.Dense(units=1, activation='sigmoid')  #output layer, output = probability of classification in the positive category
 ])
 
@@ -206,7 +222,7 @@ imdb_rnn_with_gru.compile(optimizer='adam',
 rnn_train_data2 = pad_sequences(sequences=x_train_raw, maxlen=max_sequence_length)
 rnn_test_data2 = pad_sequences(sequences=x_test_raw, maxlen=max_sequence_length)
 #run the fit method again for the last step in epoch_step
-rnn_history = imdb_rnn_with_gru.fit(rnn_train_data2, y_train_raw, epochs=20, batch_size=1024, validation_data=(rnn_test_data, y_test_raw))
+rnn_history = imdb_rnn_with_gru.fit(rnn_train_data2, y_train_raw, epochs=25, batch_size=1024, validation_data=(rnn_test_data, y_test_raw))
 
 print('RNN Loss Data has been colected!\n')
 
@@ -214,18 +230,30 @@ print('RNN Loss Data has been colected!\n')
 print("Writing results...\n\n")
 for metric in metrics.keys():
     print( metric.capitalize() + ' Results')
-    print('Train Step: ' + [str(step) for step in train_step])
+    train_step_list = ['Train Step: '] 
+    train_step_list.extend([str(step) for step in train_step])
+    print(train_step_list)
     for result in results.keys():
-        print(result + 'implementation')
-        print('Train Results: ' + [str(val) for val in results[result][metric]['train']])
-        print('Test Results: ' + [str(val) for val in results[result][metric]['test']])
+        print(result + ' implementation')
+        train_results_list = ['Train Results: ']
+        test_results_list = ['Test Results: ']
+        train_results_list.extend([str(val) for val in results[result][metric]['train']])
+        test_results_list.extend([str(val) for val in results[result][metric]['test']])
+        print(train_results_list)
+        print(test_results_list)
 
 
 #write results for rnn losses
 print('\n\nRNN with GRU Loss Data')
-print('Epochs: ' + [str(epoch) for epoch in np.linspace(1,20,20,dtype=int)])
-print('Loss: ' + [str(loss) for loss in rnn_history.history['loss']])
-print('Validation Loss: ' + [str(loss) for loss in rnn_history.history['val_loss']])
+epochs_list = ['Epochs: ']
+losses_list = ['Loss: ']
+val_losses_list = ['Validation Loss: ']
+epochs_list.extend([str(epoch) for epoch in np.linspace(1,20,20,dtype=int)])
+losses_list.extend([str(loss) for loss in rnn_history.history['loss']])
+val_losses_list.extend([str(loss) for loss in rnn_history.history['val_loss']])
+print(epochs_list)
+print(losses_list)
+print(val_losses_list)
 
 #plot the results
 for metric in metrics.keys():
@@ -234,7 +262,7 @@ for metric in metrics.keys():
     #subplot for our implementation
     axs[0].plot(train_step, our_results[metric]['train'], color='green', label='training data')
     axs[0].plot(train_step, our_results[metric]['test'], color='red', label='testing data')
-    axs[0].set_title('Our Random Forest (Constant 11 trees)')
+    axs[0].set_title('Our Random Forest (Constant 15 trees)')
     axs[0].set_xlabel('Number of Training Data')
     axs[0].set_ylabel(f'Percent {metric.capitalize()}')
     axs[0].legend()
@@ -242,7 +270,7 @@ for metric in metrics.keys():
     #subplot for scikit-learn implementation
     axs[1].plot(train_step, sklearn_results[metric]['train'], color='green', label='training data')
     axs[1].plot(train_step, sklearn_results[metric]['test'], color='red', label='testing data')
-    axs[1].set_title('Scikit-learn Random Forest (Constant 11 trees)')
+    axs[1].set_title('Scikit-learn Random Forest (Constant 15 trees)')
     axs[1].set_xlabel('Number of Training Data')
     axs[1].set_ylabel(f'Percent {metric.capitalize()}')
     axs[1].legend()
@@ -250,7 +278,7 @@ for metric in metrics.keys():
     #subplot for rnn implementation
     axs[2].plot(train_step, rnn_results[metric]['train'], color='green', label='training data')
     axs[2].plot(train_step, rnn_results[metric]['test'], color='red', label='testing data')
-    axs[2].set_title('Keras Sequential rnn (Constant 30 epochs)')
+    axs[2].set_title('Keras Sequential rnn (Constant 15 epochs)')
     axs[2].set_xlabel('Number of Training Data')
     axs[2].set_ylabel(f'Percent {metric.capitalize()}')
     axs[2].legend()
@@ -259,11 +287,12 @@ for metric in metrics.keys():
     plt.tight_layout()
     plt.show()
 
-    #plot the rnn loss based on epochs
-    plt.plot(np.linspace(1,20,20,dtype=int),rnn_history.history['loss'], color='blue', label='training data')
-    plt.plot(np.linspace(1,20,20,dtype=int),rnn_history.history['val_loss'], color='orange', label='validation data')
-    plt.set_title('Keras Sequential rnn (Constant all of the train-test data)')
-    plt.set_xlabel('Epochs')
-    plt.set_ylabel('Percent Loss')
-    plt.legend()
-    plt.show()
+#plot the rnn loss based on epochs
+plt.plot(np.linspace(1,25,25,dtype=int),rnn_history.history['loss'], color='blue', label='training data')
+plt.plot(np.linspace(1,25,25,dtype=int),rnn_history.history['val_loss'], color='orange', label='validation data')
+plt.title('Keras Sequential rnn (Constant all of the train-test data)')
+plt.xlabel('Epochs')
+plt.ylabel('Percent Loss')
+plt.legend()
+plt.tight_layout()
+plt.show()
