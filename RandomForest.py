@@ -1,5 +1,4 @@
 from id3 import *
-import csv
 from imdbDataSet import *
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
@@ -10,15 +9,15 @@ import tensorflow as tf
 from keras.preprocessing.sequence import pad_sequences
 from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
 
-def random_forest(x_train, y_train, x_test, y_test, fv_skip_top, fv_length, tree_number, tree_fv_length, min_ig, majority_percentage):
+def random_forest(x_train, y_train, x_test, y_test, fv_skip_top, fv_length, tree_number, tree_fv_length, min_ig, majority_for_split):
 
     #create encoded feature vector (index of words)
     encoded_feature_vector = imdb.getFeatureVector(skip_top=fv_skip_top, num_words=fv_length)
 
 
 
-    #each tree has a feature vector smaller than the original
-    #choose each attribute at random
+    #each tree has a feature vector smaller than the general feature vector
+    #choose each feature at random
     encoded_tree_feature_vectors = []
     for i in range(tree_number):
         encoded_tree_feature_vectors.append(random.sample(encoded_feature_vector, tree_fv_length))
@@ -50,6 +49,8 @@ def random_forest(x_train, y_train, x_test, y_test, fv_skip_top, fv_length, tree
         test_examples[i] = example
     #reshape test examples to 2D array
     test_examples = np.stack(test_examples)
+
+
 
 
 
@@ -132,11 +133,11 @@ for step in range(len(train_step)):
     y_train = y_train_raw[:train_step[step]]
 
     #training data tests
-    y_test_train, y_pred_train_our, y_pred_train_sklearn = random_forest(x_train=x_train, y_train=y_train, x_test=x_train, y_test=y_train, fv_skip_top=fv_skip_top, fv_length=fv_length,tree_number=tree_number,tree_fv_length=tree_fv_length, min_ig=min_ig_for_split, majority_percentage=majority_for_split)
+    y_test_train, y_pred_train_our, y_pred_train_sklearn = random_forest(x_train=x_train, y_train=y_train, x_test=x_train, y_test=y_train, fv_skip_top=fv_skip_top, fv_length=fv_length,tree_number=tree_number,tree_fv_length=tree_fv_length, min_ig=min_ig_for_split, majority_for_split=majority_for_split)
     
     print("Data for training tests was gathered at step -> " + str(train_step[step]))
     #testing data tests
-    y_test_test, y_pred_test_our, y_pred_test_sklearn = random_forest(x_train=x_train, y_train=y_train, x_test=x_test_raw, y_test=y_test_raw, fv_skip_top=fv_skip_top, fv_length=fv_length,tree_number=tree_number,tree_fv_length=tree_fv_length, min_ig=min_ig_for_split, majority_percentage=majority_for_split)
+    y_test_test, y_pred_test_our, y_pred_test_sklearn = random_forest(x_train=x_train, y_train=y_train, x_test=x_test_raw, y_test=y_test_raw, fv_skip_top=fv_skip_top, fv_length=fv_length,tree_number=tree_number,tree_fv_length=tree_fv_length, min_ig=min_ig_for_split, majority_for_split=majority_for_split)
     print("Data for testing tests was gathered at step -> " + str(train_step[step]))
 
     #pad data sequences to fit into a specific size
@@ -248,7 +249,7 @@ print('\n\nRNN with GRU Loss Data')
 epochs_list = ['Epochs: ']
 losses_list = ['Loss: ']
 val_losses_list = ['Validation Loss: ']
-epochs_list.extend([str(epoch) for epoch in np.linspace(1,20,20,dtype=int)])
+epochs_list.extend([str(epoch) for epoch in np.linspace(1,25,25,dtype=int)])
 losses_list.extend([str(loss) for loss in rnn_history.history['loss']])
 val_losses_list.extend([str(loss) for loss in rnn_history.history['val_loss']])
 print(epochs_list)
