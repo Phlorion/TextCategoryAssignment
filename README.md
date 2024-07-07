@@ -56,7 +56,7 @@ For our vocabulary we search for a range of words that skips very common words w
 
 ## Adaboost
 
-#### [Adaboost's implementation can be found here.](Adaboost.ipynb)
+The implementation of the adaboost algorithm can be found in Adaboost.ipynb, with documentation.
 
 ### Accuracy
 ![ada_acc](images/Adaboost/a.png)
