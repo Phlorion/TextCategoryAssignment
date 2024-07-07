@@ -6,6 +6,8 @@ class IMDB:
         self.inverted_word_index = None
         self.x_train = None
         self.y_train = None
+        self.x_test = None
+        self.y_test = None
     
     # Use the default parameters to keras.datasets.imdb.load_data
     def getTrainingData(self, start_char=1, oov_char=2, index_from=3, skip_top=100, num_words=1000, maxlen=200):
@@ -15,6 +17,7 @@ class IMDB:
         )
 
         self.x_train, self.y_train = x_train, y_train
+        self.x_test, self.y_test = x_test, y_test
         
         # Retrieve the word index file mapping words to indices
         self.word_index = keras.datasets.imdb.get_word_index()
@@ -48,18 +51,27 @@ class IMDB:
     def getYtrain(self, n):
         return self.y_train[n]
     
+    def getXtest(self, n):
+        return self.x_test[n]
+    
+    def getYtest(self, n):
+        return self.y_test[n]
+    
     def getWordIndex(self, word):
         return self.word_index[word]
     
     def getInvertedWordIndex(self, n):
-        return self.inverted_word_index[n]
+        return self.inverted_word_index[n+4]
     
-'''
+
 if __name__ == '__main__':
     imdb = IMDB()
-    imdb.getTrainingData()
-    print(imdb.getDecodedSequence(0))
+    (x_train, y_train), _ = imdb.getTrainingData()
+    print(imdb.getDecodedSequence(x_train, 0))
     print(imdb.getXtrain(0))
     print(imdb.getYtrain(0))
-'''
+
+    print(imdb.getInvertedWordIndex(0))
+
+
     
